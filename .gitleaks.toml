@@ -1,5 +1,5 @@
 # Gitleaks config — Amazonas Recicla
-# Estende as regras default do Gitleaks.
+# Estende as regras default do Gitleaks com allowlist de templates e lockfiles.
 # Ver: https://github.com/gitleaks/gitleaks
 
 [extend]
@@ -14,4 +14,18 @@ paths = [
   '''pnpm-lock\.yaml''',
   # READMEs podem mencionar nomes de variaveis em exemplos
   '''.*README\.md''',
+  # Templates .env e .env.example tem placeholders sintaticos por design
+  '''.*\.env\.example''',
+  '''.*\.env\.template''',
+]
+
+# Allowlist de valores especificos que parecem segredos mas sao placeholders
+regexes = [
+  '''SEU_PROJETO''',
+  '''SENHA_DB''',
+  '''ID_DO_PROJETO''',
+  '''SENHA_DO_BANCO''',
+  '''HOST_DO_POOLER''',
+  '''cole-aqui-a-anon-key-do-dashboard''',
+  '''cole-aqui-a-service-role-key-do-dashboard''',
 ]
