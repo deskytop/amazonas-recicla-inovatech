@@ -1,0 +1,17 @@
+# Gitleaks config — Amazonas Recicla
+# Estende as regras default do Gitleaks.
+# Ver: https://github.com/gitleaks/gitleaks
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist global"
+paths = [
+  # Lockfiles contem hashes de integridade que nao sao segredos
+  '''package-lock\.json''',
+  '''yarn\.lock''',
+  '''pnpm-lock\.yaml''',
+  # READMEs podem mencionar nomes de variaveis em exemplos
+  '''.*README\.md''',
+]
