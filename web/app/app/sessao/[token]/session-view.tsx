@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { SessionCountdown } from "@/components/app/session-countdown";
 import { MaterialIcon } from "@/components/app/material-icon";
+import { BackButton } from "@/components/app/back-button";
 import type { Material } from "@/lib/domain/materials";
 import type { SessionStatus } from "@/lib/domain/session-lifecycle";
 import { Sparkles, AlertCircle, CheckCircle2, PackageOpen } from "lucide-react";
@@ -72,6 +73,7 @@ export function SessionView({ initialSession }: { initialSession: SessionState }
           +{session.pointsValue} pts
         </p>
         <p className="text-muted-foreground">Pontos creditados ao seu saldo.</p>
+        <BackButton href="/app" label="Voltar para o início" className="mt-4" />
       </div>
     );
   }
@@ -84,6 +86,7 @@ export function SessionView({ initialSession }: { initialSession: SessionState }
         <p className="text-muted-foreground">
           Volte à lixeira e escaneie o QR Code para tentar novamente.
         </p>
+        <BackButton href="/app" label="Voltar para o início" className="mt-4" />
       </div>
     );
   }
@@ -96,6 +99,7 @@ export function SessionView({ initialSession }: { initialSession: SessionState }
         <p className="text-muted-foreground">
           A lixeira não conseguiu processar este descarte. Tente novamente.
         </p>
+        <BackButton href="/app" label="Voltar para o início" className="mt-4" />
       </div>
     );
   }
