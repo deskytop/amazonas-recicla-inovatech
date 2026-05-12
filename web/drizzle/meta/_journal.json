@@ -8,6 +8,13 @@
       "when": 1778535724313,
       "tag": "0000_rapid_santa_claus",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778547329490,
+      "tag": "0001_amused_zarda",
+      "breakpoints": true
     }
   ]
 }
