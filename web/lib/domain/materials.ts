@@ -14,3 +14,17 @@ export function pointsForMaterial(material: Material): number {
 export function isValidMaterial(value: string): value is Material {
   return value in MATERIAL_POINTS;
 }
+
+export const MATERIAL_LABELS: Record<Material, string> = {
+  plastic: "Plástico",
+  metal: "Metal",
+  glass: "Vidro",
+  paper: "Papel",
+};
+
+export const MATERIAL_COLORS: Record<Material, string> = {
+  plastic: "#FFB700",
+  metal: "#7B7B7B",
+  glass: "#3FA9D6",
+  paper: "#3478C2",
+};
