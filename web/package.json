@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "seed:bin": "tsx scripts/seed-bin.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
