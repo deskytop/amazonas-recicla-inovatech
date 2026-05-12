@@ -59,7 +59,10 @@ terraform.tfstate*
 .firebaserc
 
 # --- Backups de banco e dumps ---
+# Bloqueia SQL solto na raiz/qualquer lugar (dumps acidentais),
+# mas permite migrations e policies versionadas dentro de drizzle/.
 *.sql
+!web/drizzle/**/*.sql
 *.sql.gz
 *.dump
 *.bak
