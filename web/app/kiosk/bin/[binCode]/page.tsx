@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { db } from "@/lib/db/client";
 import { bins, sessions, profiles } from "@/lib/db/schema";
 import { eq, and, inArray, desc } from "drizzle-orm";
@@ -36,7 +37,13 @@ export default async function KioskPage({ params }: Params) {
     .orderBy(desc(sessions.createdAt))
     .limit(1);
 
-  const claimUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/app/bin/${bin.code}/iniciar`;
+  // Constroi URL absoluta a partir dos headers do request — funciona em qualquer
+  // ambiente (local, preview, producao) sem depender de NEXT_PUBLIC_SITE_URL ser configurada.
+  const headerList = await headers();
+  const host = headerList.get("host") ?? "localhost:3000";
+  const protocol =
+    headerList.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  const claimUrl = `${protocol}://${host}/app/bin/${bin.code}/iniciar`;
 
   return (
     <KioskView
