@@ -3,10 +3,9 @@ import { db } from "@/lib/db/client";
 import { rewards, profiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
-import { redeemRewardAction } from "@/lib/actions/redeem-reward";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { canAfford } from "@/lib/domain/rewards";
+import { RedeemDialog } from "@/components/app/redeem-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -34,15 +33,9 @@ export default async function RewardDetail({ params }: Params) {
     .where(eq(profiles.id, user.id))
     .limit(1);
 
-  const affordable = canAfford(profile?.totalPoints ?? 0, reward.costPoints);
-
-  async function handleRedeem() {
-    "use server";
-    const result = await redeemRewardAction(id);
-    if (!result.ok) {
-      throw new Error(result.error);
-    }
-  }
+  const balance = profile?.totalPoints ?? 0;
+  const affordable = canAfford(balance, reward.costPoints);
+  const missing = Math.max(0, reward.costPoints - balance);
 
   return (
     <div className="p-6 space-y-5">
@@ -69,9 +62,7 @@ export default async function RewardDetail({ params }: Params) {
           <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
             Seu saldo
           </span>
-          <span className="font-display text-lg">
-            {profile?.totalPoints ?? 0} pts
-          </span>
+          <span className="font-display text-lg">{balance} pts</span>
         </div>
         {reward.stock !== null && (
           <div className="flex items-center justify-between">
@@ -85,18 +76,14 @@ export default async function RewardDetail({ params }: Params) {
         )}
       </Card>
 
-      <form action={handleRedeem}>
-        <Button
-          type="submit"
-          size="lg"
-          disabled={!affordable}
-          className="w-full font-mono uppercase tracking-wider"
-        >
-          {affordable
-            ? "Resgatar agora"
-            : `Faltam ${reward.costPoints - (profile?.totalPoints ?? 0)} pts`}
-        </Button>
-      </form>
+      <RedeemDialog
+        rewardId={reward.id}
+        rewardTitle={reward.title}
+        costPoints={reward.costPoints}
+        rewardType={reward.type}
+        affordable={affordable}
+        missingPoints={missing}
+      />
     </div>
   );
 }

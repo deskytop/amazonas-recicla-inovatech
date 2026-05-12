@@ -8,7 +8,7 @@ import { eq, sql } from "drizzle-orm";
 import { canAfford } from "@/lib/domain/rewards";
 
 export type RedeemResult =
-  | { ok: true; redemptionId: string }
+  | { ok: true; redemptionId: string; voucherCode: string }
   | {
       ok: false;
       error: "unauthenticated" | "reward_not_found" | "insufficient_points" | "out_of_stock";
@@ -73,7 +73,7 @@ export async function redeemRewardAction(rewardId: string): Promise<RedeemResult
       })
       .returning();
 
-    return { ok: true as const, redemptionId: redemption!.id };
+    return { ok: true as const, redemptionId: redemption!.id, voucherCode };
   });
 
   revalidatePath("/app");
