@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -38,7 +37,6 @@ export function RedeemDialog({
   affordable,
   missingPoints,
 }: RedeemDialogProps) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<DialogState>({ phase: "idle" });
 
@@ -57,12 +55,14 @@ export function RedeemDialog({
   }
 
   function handleClose() {
-    const wasSuccess = state.phase === "success";
+    // Apos sucesso, hard reload para garantir saldo atualizado em toda a UI
+    // (router.refresh() do Next 16 nao invalida o cache RSC de forma confiavel aqui).
+    if (state.phase === "success") {
+      window.location.reload();
+      return;
+    }
     setOpen(false);
     setTimeout(() => setState({ phase: "idle" }), 200);
-    if (wasSuccess) {
-      router.refresh();
-    }
   }
 
   return (
