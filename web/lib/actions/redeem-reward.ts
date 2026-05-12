@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db/client";
 import { rewards, profiles, redemptions } from "@/lib/db/schema";
@@ -75,9 +74,6 @@ export async function redeemRewardAction(rewardId: string): Promise<RedeemResult
 
     return { ok: true as const, redemptionId: redemption!.id, voucherCode };
   });
-
-  revalidatePath("/app");
-  revalidatePath("/app/recompensas");
 
   return result;
 }

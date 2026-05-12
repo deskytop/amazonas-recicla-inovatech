@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -37,25 +38,31 @@ export function RedeemDialog({
   affordable,
   missingPoints,
 }: RedeemDialogProps) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<DialogState>({ phase: "idle" });
-  const [, startTransition] = useTransition();
 
-  function handleConfirm() {
+  async function handleConfirm() {
     setState({ phase: "loading" });
-    startTransition(async () => {
+    try {
       const result = await redeemRewardAction(rewardId);
       if (result.ok) {
         setState({ phase: "success", voucherCode: result.voucherCode });
       } else {
         setState({ phase: "error", error: result.error });
       }
-    });
+    } catch {
+      setState({ phase: "error", error: "unknown" });
+    }
   }
 
   function handleClose() {
+    const wasSuccess = state.phase === "success";
     setOpen(false);
     setTimeout(() => setState({ phase: "idle" }), 200);
+    if (wasSuccess) {
+      router.refresh();
+    }
   }
 
   return (
