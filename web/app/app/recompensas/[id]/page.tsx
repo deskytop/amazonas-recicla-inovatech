@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card } from "@/components/ui/card";
 import { canAfford } from "@/lib/domain/rewards";
 import { RedeemDialog } from "@/components/app/redeem-dialog";
+import { BackButton } from "@/components/app/back-button";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,8 @@ export default async function RewardDetail({ params }: Params) {
 
   return (
     <div className="p-6 space-y-5">
+      <BackButton href="/app/recompensas" />
+
       <header className="space-y-2">
         <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           Recompensa

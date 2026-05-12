@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { createSessionAction } from "@/lib/actions/create-session";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { BackButton } from "@/components/app/back-button";
 import { MapPin, Sparkles } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +19,7 @@ export default async function IniciarSessaoPage({ params }: Params) {
   if (!bin) {
     return (
       <div className="p-6 space-y-3">
+        <BackButton href="/app" />
         <h1 className="font-display text-2xl font-bold">Lixeira não encontrada</h1>
         <p className="text-muted-foreground">
           O código <span className="font-mono">{code}</span> não está cadastrado.
@@ -29,6 +31,7 @@ export default async function IniciarSessaoPage({ params }: Params) {
   if (bin.status !== "active") {
     return (
       <div className="p-6 space-y-3">
+        <BackButton href="/app" />
         <h1 className="font-display text-2xl font-bold">Lixeira indisponível</h1>
         <p className="text-muted-foreground">
           Esta lixeira está em <strong>{bin.status}</strong>. Tente outra próxima.
@@ -47,6 +50,8 @@ export default async function IniciarSessaoPage({ params }: Params) {
 
   return (
     <div className="p-6 space-y-6">
+      <BackButton href="/app" />
+
       <header className="space-y-2 text-center">
         <Sparkles className="h-12 w-12 mx-auto text-primary" />
         <h1 className="font-display text-3xl font-bold text-primary">
