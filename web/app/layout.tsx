@@ -23,6 +23,7 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: "Amazonas Recicla",
   description: "Carteira ambiental digital — descarte certo, recompensa real.",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

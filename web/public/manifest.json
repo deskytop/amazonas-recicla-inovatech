@@ -1,0 +1,11 @@
+{
+  "name": "Amazonas Recicla",
+  "short_name": "AR",
+  "description": "Carteira ambiental digital — descarte certo, recompensa real.",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#f5fbe8",
+  "theme_color": "#00450d",
+  "icons": []
+}
