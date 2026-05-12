@@ -13,6 +13,7 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "seed:bin": "tsx scripts/seed-bin.ts",
+    "seed:bin:print": "tsx scripts/print-bin-sql.ts",
     "seed:rewards": "tsx scripts/seed-rewards.ts"
   },
   "dependencies": {
