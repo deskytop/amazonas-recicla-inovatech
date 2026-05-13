@@ -38,75 +38,51 @@ export function KioskView({
   useEffect(() => {
     const supabase = createClient();
 
+    // Escuta broadcasts disparados pelas mutations server-side.
+    // Mais seguro que postgres_changes: payload e sanitizado pelo backend
+    // (sem expor pontos/level/email via RLS aberta).
     const channel = supabase
-      .channel(`bin:${binId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "sessions",
-          filter: `bin_id=eq.${binId}`,
-        },
-        async (payload) => {
-          const row = payload.new as {
-            token: string;
-            status: SessionStatus;
-            material: Material | null;
-            points_value: number | null;
-            expires_at: string;
-            user_id: string;
-          };
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("display_name")
-            .eq("id", row.user_id)
-            .single();
-          setSession({
-            token: row.token,
-            status: row.status,
-            material: row.material,
-            pointsValue: row.points_value,
-            expiresAt: row.expires_at,
-            userDisplayName: profile?.display_name ?? "Visitante",
-          });
-        },
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "sessions",
-          filter: `bin_id=eq.${binId}`,
-        },
-        (payload) => {
-          const row = payload.new as {
-            token: string;
-            status: SessionStatus;
-            material: Material | null;
-            points_value: number | null;
-            expires_at: string;
-          };
-          setSession((prev) =>
-            prev && prev.token === row.token
-              ? {
-                  ...prev,
-                  status: row.status,
-                  material: row.material,
-                  pointsValue: row.points_value,
-                  expiresAt: row.expires_at,
-                }
-              : prev,
-          );
-        },
-      )
+      .channel(`bin:${binId}`, { config: { broadcast: { self: false } } })
+      .on("broadcast", { event: "session_change" }, (message) => {
+        const payload = message.payload as {
+          token: string;
+          status: SessionStatus;
+          material: Material | null;
+          pointsValue: number | null;
+          expiresAt: string;
+          userDisplayName: string;
+        };
+        setSession(payload);
+      })
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [binId]);
+
+  // Expiracao client-side: se sessao em awaiting_material/material_detected
+  // ultrapassa expires_at, considera expired (fallback porque pg_cron expira no
+  // banco mas nao dispara broadcast — o kiosk decide visualmente).
+  useEffect(() => {
+    if (!session) return;
+    if (session.status !== "awaiting_material" && session.status !== "material_detected") {
+      return;
+    }
+    const remaining = new Date(session.expiresAt).getTime() - Date.now();
+    if (remaining <= 0) {
+      setSession((s) => (s ? { ...s, status: "expired" } : s));
+      return;
+    }
+    const id = setTimeout(() => {
+      setSession((s) =>
+        s && (s.status === "awaiting_material" || s.status === "material_detected")
+          ? { ...s, status: "expired" }
+          : s,
+      );
+    }, remaining);
+    return () => clearTimeout(id);
+  }, [session?.status, session?.expiresAt]);
 
   // Reset apos 5s no completed
   useEffect(() => {

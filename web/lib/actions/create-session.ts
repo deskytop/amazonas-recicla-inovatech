@@ -3,12 +3,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db/client";
-import { bins, sessions } from "@/lib/db/schema";
+import { bins, sessions, profiles } from "@/lib/db/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import {
   generateSessionToken,
   SESSION_TTL_SECONDS,
 } from "@/lib/domain/session-lifecycle";
+import { broadcastBinSession } from "@/lib/realtime/broadcast";
 
 export type CreateSessionResult =
   | { ok: true; token: string }
@@ -54,6 +55,22 @@ export async function createSessionAction(binCode: string): Promise<CreateSessio
     userId: user.id,
     status: "awaiting_material",
     expiresAt,
+  });
+
+  // Notifica o kiosk via broadcast (sem expor dados privados via RLS)
+  const [profile] = await db
+    .select({ displayName: profiles.displayName })
+    .from(profiles)
+    .where(eq(profiles.id, user.id))
+    .limit(1);
+
+  await broadcastBinSession(bin.id, {
+    token,
+    status: "awaiting_material",
+    material: null,
+    pointsValue: null,
+    expiresAt: expiresAt.toISOString(),
+    userDisplayName: profile?.displayName ?? "Visitante",
   });
 
   redirect(`/app/sessao/${token}`);

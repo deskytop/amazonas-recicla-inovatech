@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db/client";
-import { sessions, bins } from "@/lib/db/schema";
+import { sessions, bins, profiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { verifyBinKey } from "@/lib/auth/bin-key";
 import { classifyRequestSchema } from "@/lib/api/validation";
 import { canTransition } from "@/lib/domain/session-lifecycle";
 import { pointsForMaterial } from "@/lib/domain/materials";
+import { broadcastBinSession } from "@/lib/realtime/broadcast";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,21 @@ export async function POST(request: Request, { params }: Params) {
       materialDetectedAt: new Date(),
     })
     .where(eq(sessions.token, token));
+
+  // Notifica o kiosk via broadcast
+  const [profile] = await db
+    .select({ displayName: profiles.displayName })
+    .from(profiles)
+    .where(eq(profiles.id, session.userId))
+    .limit(1);
+  await broadcastBinSession(bin.id, {
+    token,
+    status: "material_detected",
+    material: parsed.data.material,
+    pointsValue,
+    expiresAt: session.expiresAt.toISOString(),
+    userDisplayName: profile?.displayName ?? "Visitante",
+  });
 
   return NextResponse.json({
     ok: true,

@@ -5,6 +5,7 @@ import { eq, sql } from "drizzle-orm";
 import { verifyBinKey } from "@/lib/auth/bin-key";
 import { canTransition } from "@/lib/domain/session-lifecycle";
 import { levelForLifetimePoints } from "@/lib/domain/levels";
+import { broadcastBinSession } from "@/lib/realtime/broadcast";
 
 export const dynamic = "force-dynamic";
 
@@ -76,6 +77,21 @@ export async function POST(request: Request, { params }: Params) {
         .set({ level: newLevel.id })
         .where(eq(profiles.id, session.userId));
     }
+  });
+
+  // Notifica o kiosk via broadcast (apos a tx commitada)
+  const [profile] = await db
+    .select({ displayName: profiles.displayName })
+    .from(profiles)
+    .where(eq(profiles.id, session.userId))
+    .limit(1);
+  await broadcastBinSession(bin.id, {
+    token,
+    status: "completed",
+    material: session.material,
+    pointsValue: pointsToCredit,
+    expiresAt: session.expiresAt.toISOString(),
+    userDisplayName: profile?.displayName ?? "Visitante",
   });
 
   return NextResponse.json({ ok: true, pointsCredited: pointsToCredit });
