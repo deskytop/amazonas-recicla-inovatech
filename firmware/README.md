@@ -89,16 +89,20 @@ reconecta e a partir daí lembra dessa rede em todo boot.
 
 ### Trocar de rede (ex: casa → feira)
 
-Opção mais simples: dentro do código tem a função `connectWifi()`. Pra forçar
-nova configuração, adicionar antes do `wm.autoConnect`:
+A partir do sketch 2, **segura o botão BOOT do ESP32 por 5 segundos**
+(a placa fica nos pinos próximos ao chip — o outro é EN/RST). O log no Serial
+Monitor confirma:
 
-```cpp
-wm.resetSettings();
+```
+[btn] BOOT pressionado — segure 5s pra resetar Wi-Fi
+[btn] !! RESETANDO CREDENCIAIS WI-FI E REINICIANDO
 ```
 
-Recompilar, fazer upload uma vez. Depois remover essa linha e voltar a fazer
-upload — a próxima vez que rodar, o AP de setup volta. (Em sketches futuros
-isso vai virar um botão físico.)
+O ESP32 reinicia e levanta de novo o AP `AmazonasRecicla-Setup` pra você
+configurar a nova rede pelo celular. Sem recompilar nada.
+
+> Alternativa por código: dentro de `connectWifi()`, adicionar `wm.resetSettings();`
+> antes do `wm.autoConnect`, fazer upload, remover, fazer upload de novo.
 
 ## O que esperar no Serial Monitor
 
@@ -123,12 +127,11 @@ Daí em diante, a cada 30s: novo heartbeat com `HTTP 200`.
 | # | Funcionalidade | Status |
 |---|---|---|
 | 1 | Wi-Fi + heartbeat | ✅ |
-| 2 | Polling de `active-session` | a fazer |
-| 3 | Classify mock + complete (sem câmera) | a fazer |
-| 4 | Câmera OV2640 + captura | a fazer |
-| 5 | Classificação simples (cor dominante) | a fazer |
-| 6 | Servo da gaveta + HC-SR04 | a fazer |
-| 7 | Motor de passo direcionando compartimentos | V2 |
+| 2 | Polling + classify mock + complete + watchdog + reset Wi-Fi via BOOT | ✅ |
+| 3 | Câmera OV2640 + captura | a fazer |
+| 4 | Classificação simples (cor dominante) | a fazer |
+| 5 | Servo da gaveta + HC-SR04 | a fazer |
+| 6 | Motor de passo direcionando compartimentos | V2 |
 
 ## Troubleshooting
 
