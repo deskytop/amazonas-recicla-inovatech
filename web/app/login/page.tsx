@@ -1,27 +1,17 @@
-"use client";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { LoginForm } from "./login-form";
 
-import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/client";
-import { useState } from "react";
+export const dynamic = "force-dynamic";
 
-export default function LoginPage() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleGoogleSignIn() {
-    setLoading(true);
-    setError(null);
-    const supabase = createClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${location.origin}/auth/callback`,
-      },
-    });
-    if (error) {
-      setError(error.message);
-      setLoading(false);
-    }
+export default async function LoginPage() {
+  // Se ja autenticado, vai direto pro app
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    redirect("/app");
   }
 
   return (
@@ -36,18 +26,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <Button
-          onClick={handleGoogleSignIn}
-          disabled={loading}
-          className="w-full font-mono uppercase tracking-wider"
-          size="lg"
-        >
-          {loading ? "Conectando..." : "Continuar com Google"}
-        </Button>
-
-        {error && (
-          <p className="text-sm text-destructive text-center">{error}</p>
-        )}
+        <LoginForm />
       </div>
     </main>
   );
