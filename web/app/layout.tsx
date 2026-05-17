@@ -1,29 +1,31 @@
 import type { Metadata } from "next";
-import { Inter, Plus_Jakarta_Sans, Space_Grotesk } from "next/font/google";
+import { Inter, Fraunces, JetBrains_Mono } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-const jakarta = Plus_Jakarta_Sans({
+const fraunces = Fraunces({
   subsets: ["latin"],
   variable: "--font-display",
-  weight: ["400", "600", "700"],
+  weight: "variable",
+  axes: ["SOFT", "WONK", "opsz"],
 });
 
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700"],
 });
 
-const spaceGrotesk = Space_Grotesk({
+const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
-  weight: ["500", "700"],
+  weight: ["400", "500", "700"],
 });
 
 export const metadata: Metadata = {
-  title: "Amazonas Recicla",
-  description: "Carteira ambiental digital — descarte certo, recompensa real.",
+  title: "Amazonas Recicla — Carteira ambiental digital",
+  description:
+    "Lixeira inteligente com separação automática e gamificação. Cada descarte vira prova auditável para acessar IPTU Verde, créditos Ecoenel e benefícios reais.",
   manifest: "/manifest.json",
 };
 
@@ -33,7 +35,7 @@ export default function RootLayout({
   return (
     <html
       lang="pt-BR"
-      className={`${jakarta.variable} ${inter.variable} ${spaceGrotesk.variable}`}
+      className={`${fraunces.variable} ${inter.variable} ${jetbrainsMono.variable}`}
     >
       <body className="antialiased bg-background text-foreground">
         {children}

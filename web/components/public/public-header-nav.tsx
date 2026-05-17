@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sprout } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -22,50 +21,54 @@ export function PublicHeaderNav({ isAuthenticated }: PublicHeaderNavProps) {
   const ctaLabel = isAuthenticated ? "Meu app" : "Entrar";
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
-      <div className="max-w-6xl mx-auto flex h-16 items-center justify-between px-4">
-        <Link href="/" className="flex items-center gap-2 group">
-          <div className="rounded-full bg-primary text-primary-foreground h-9 w-9 flex items-center justify-center group-hover:scale-105 transition-transform">
-            <Sprout className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="font-display font-bold text-primary leading-none">
-              Amazonas Recicla
-            </p>
-            <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground leading-none mt-1">
-              Resíduo hoje, recurso amanhã
-            </p>
-          </div>
+    <header className="sticky top-0 z-40 w-full border-b border-border bg-background/85 backdrop-blur-md">
+      <div className="max-w-6xl mx-auto flex h-20 items-center justify-between px-6">
+        <Link href="/" className="flex items-baseline gap-2.5 group">
+          <span className="font-headline text-2xl font-bold text-primary group-hover:text-secondary transition-colors">
+            Amazonas
+          </span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-amber-accent">
+            ↻ recicla
+          </span>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-6">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "font-mono text-xs uppercase tracking-wider transition-colors",
-                pathname === item.href
-                  ? "text-primary font-semibold"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
+        <nav className="hidden md:flex items-center gap-1">
+          {NAV.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "px-3 py-2 font-mono text-[11px] uppercase tracking-[0.2em] transition-colors relative",
+                  active
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {item.label}
+                {active && (
+                  <span className="absolute left-3 right-3 -bottom-0.5 h-0.5 bg-amber-accent" />
+                )}
+              </Link>
+            );
+          })}
           <Link
             href={ctaHref}
-            className="rounded-full bg-primary text-primary-foreground px-4 py-1.5 font-mono text-xs uppercase tracking-wider hover:bg-primary/90 transition-colors"
+            className="ml-4 inline-flex items-center gap-2 rounded-none border border-primary bg-primary text-primary-foreground px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.2em] hover:bg-background hover:text-primary transition-colors group"
           >
             {ctaLabel}
+            <span className="inline-block transition-transform group-hover:translate-x-1">
+              →
+            </span>
           </Link>
         </nav>
 
         <Link
           href={ctaHref}
-          className="md:hidden rounded-full bg-primary text-primary-foreground px-4 py-1.5 font-mono text-xs uppercase tracking-wider"
+          className="md:hidden inline-flex items-center gap-2 border border-primary bg-primary text-primary-foreground px-4 py-2 font-mono text-[10px] uppercase tracking-[0.2em]"
         >
-          {ctaLabel}
+          {ctaLabel} →
         </Link>
       </div>
     </header>
