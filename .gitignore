@@ -140,6 +140,9 @@ env/
 *.hex
 *.bin
 *.elf
+# Segredos do firmware (bin API key, etc) — nunca commitar.
+firmware/**/secrets.h
+!firmware/**/secrets.h.example
 
 # --- Misc ---
 *.tmp
