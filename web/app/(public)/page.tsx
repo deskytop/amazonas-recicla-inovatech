@@ -1,7 +1,18 @@
 import Link from "next/link";
 import { ArrowRight, Recycle, Smartphone, Award, Trash2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const isAuthenticated = !!user;
+  const primaryHref = isAuthenticated ? "/app" : "/login";
+  const primaryLabel = isAuthenticated ? "Abrir meu app" : "Entrar com Google";
+
   return (
     <>
       <section className="relative overflow-hidden bg-gradient-to-b from-background via-background to-accent/5">
@@ -21,10 +32,10 @@ export default function HomePage() {
             </p>
             <div className="flex flex-wrap gap-3">
               <Link
-                href="/login"
+                href={primaryHref}
                 className="inline-flex items-center gap-2 rounded-full bg-primary text-primary-foreground px-6 py-3 font-mono uppercase tracking-wider text-sm hover:bg-primary/90 transition-colors"
               >
-                Entrar com Google <ArrowRight className="h-4 w-4" />
+                {primaryLabel} <ArrowRight className="h-4 w-4" />
               </Link>
               <Link
                 href="/sobre"
@@ -113,10 +124,10 @@ export default function HomePage() {
             Visite o estande da FAMETRO, escaneie o QR e veja como o descarte digital pode reformar a economia circular da Amazônia.
           </p>
           <Link
-            href="/login"
+            href={primaryHref}
             className="inline-flex items-center gap-2 rounded-full bg-accent text-accent-foreground px-6 py-3 font-mono uppercase tracking-wider text-sm hover:bg-accent/90 transition-colors"
           >
-            Começar agora <ArrowRight className="h-4 w-4" />
+            {isAuthenticated ? "Abrir meu app" : "Começar agora"} <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </section>
