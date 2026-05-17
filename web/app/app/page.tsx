@@ -3,6 +3,7 @@ import { db } from "@/lib/db/client";
 import { profiles, sessions } from "@/lib/db/schema";
 import { eq, and, count, sum, gte } from "drizzle-orm";
 import { PointsBalance } from "@/components/app/points-balance";
+import { OnboardingBanner } from "@/components/app/onboarding-banner";
 import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { ScanLine, History, Gift } from "lucide-react";
@@ -58,6 +59,8 @@ export default async function HomePage() {
           {profile.displayName}
         </h1>
       </header>
+
+      {profile.lifetimePointsEarned === 0 && <OnboardingBanner />}
 
       <PointsBalance
         totalPoints={profile.totalPoints}
