@@ -5,13 +5,17 @@ import { eq, and, desc } from "drizzle-orm";
 import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { LevelBadge } from "@/components/app/level-badge";
-import { BadgeCard } from "@/components/app/badge-card";
+import { levelForLifetimePoints } from "@/lib/domain/levels";
 import { signOutAction } from "@/lib/actions/sign-out";
-import { Award, Info, BarChart3, Users, ExternalLink } from "lucide-react";
+import { Award } from "lucide-react";
 
 export const dynamic = "force-dynamic";
+
+const DATE_FORMAT = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+});
 
 export default async function PerfilPage() {
   const supabase = await createClient();
@@ -57,86 +61,95 @@ export default async function PerfilPage() {
     .map((p) => p[0]?.toUpperCase() ?? "")
     .join("");
 
+  const level = levelForLifetimePoints(profile.lifetimePointsEarned);
+
   return (
-    <div className="p-4 space-y-5">
-      <header className="flex flex-col items-center text-center space-y-3 pt-4">
-        <Avatar className="h-20 w-20">
-          {profile.avatarUrl && <AvatarImage src={profile.avatarUrl} alt={profile.displayName} />}
-          <AvatarFallback className="bg-primary text-primary-foreground text-xl">
-            {initials}
-          </AvatarFallback>
-        </Avatar>
-        <div>
-          <h1 className="font-display text-2xl font-bold">{profile.displayName}</h1>
-          <p className="text-sm text-muted-foreground">{user.email}</p>
+    <div className="px-4 py-5 space-y-6">
+      <header className="space-y-4 pt-2">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-14 w-14 border-2 border-primary">
+            {profile.avatarUrl && (
+              <AvatarImage src={profile.avatarUrl} alt={profile.displayName} />
+            )}
+            <AvatarFallback className="bg-primary text-primary-foreground font-headline text-base font-bold">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          <div className="min-w-0 flex-1">
+            <h1 className="font-headline text-xl font-bold leading-tight truncate">
+              {profile.displayName}
+            </h1>
+            <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+          </div>
         </div>
-        <LevelBadge lifetimePointsEarned={profile.lifetimePointsEarned} />
+
+        <div className="flex items-baseline gap-2 border-l-2 border-amber-accent pl-3">
+          <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-amber-accent">
+            Nível {level.id}
+          </span>
+          <span className="font-headline text-lg font-bold text-primary leading-none">
+            {level.name}
+          </span>
+        </div>
       </header>
 
-      <Card className="p-5 space-y-3">
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            Saldo atual
-          </span>
-          <span className="font-display text-lg font-semibold">{profile.totalPoints} pts</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            Total acumulado
-          </span>
-          <span className="font-display text-lg font-semibold">
-            {profile.lifetimePointsEarned} pts
-          </span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-xs uppercase tracking-wider text-muted-foreground">
-            Conta criada
-          </span>
-          <span className="font-mono text-xs">
-            {profile.createdAt.toLocaleDateString("pt-BR")}
-          </span>
-        </div>
-      </Card>
+      <dl className="divide-y divide-border border-y border-border">
+        <Row label="Saldo atual" value={profile.totalPoints.toString()} unit="pts" emphasis />
+        <Row label="Total acumulado" value={profile.lifetimePointsEarned.toString()} unit="pts" />
+        <Row label="Conta criada em" value={DATE_FORMAT.format(profile.createdAt)} />
+      </dl>
 
-      <section className="space-y-2">
-        <div className="flex items-center gap-2">
-          <Award className="h-4 w-4 text-primary" />
-          <h2 className="font-display font-semibold">Minhas conquistas</h2>
-          <span className="font-mono text-xs text-muted-foreground">({badges.length})</span>
-        </div>
-        {badges.length === 0 ? (
-          <Card className="p-6 text-center bg-muted/30 border-dashed">
-            <p className="text-xs text-muted-foreground">
-              Resgate badges na aba Prêmios para que apareçam aqui.
-            </p>
-          </Card>
-        ) : (
-          <div className="grid grid-cols-3 gap-2">
-            {badges.map((badge) => (
-              <BadgeCard
-                key={badge.redemptionId}
-                title={badge.title}
-                redeemedAt={badge.redeemedAt}
-              />
-            ))}
+      <section className="space-y-3">
+        <div className="flex items-baseline justify-between">
+          <div className="flex items-center gap-2">
+            <Award className="h-3.5 w-3.5 text-amber-accent" />
+            <h2 className="font-mono text-[10px] uppercase tracking-[0.22em] text-amber-accent">
+              Conquistas
+            </h2>
           </div>
+          <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+            {badges.length.toString().padStart(2, "0")}
+          </span>
+        </div>
+
+        {badges.length === 0 ? (
+          <p className="text-xs text-muted-foreground italic">
+            Nenhuma conquista ainda. Resgate badges na aba Prêmios.
+          </p>
+        ) : (
+          <ul className="grid grid-cols-2 gap-2">
+            {badges.map((badge) => (
+              <li key={badge.redemptionId}>
+                <article className="p-3 border-l-2 border-amber-accent bg-amber-accent/5 space-y-1">
+                  <p className="font-headline text-sm font-semibold leading-tight">
+                    {badge.title}
+                  </p>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+                    {DATE_FORMAT.format(badge.redeemedAt)}
+                  </p>
+                </article>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 
       <section className="space-y-2">
-        <h2 className="font-display font-semibold">Sobre o projeto</h2>
-        <div className="grid grid-cols-1 gap-2">
-          <ProjectLink href="/sobre" icon={Info} title="Sobre o Amazonas Recicla" description="Problema, solução e objetivos do projeto" />
-          <ProjectLink href="/dados" icon={BarChart3} title="Dados de impacto" description="Estatísticas em tempo real do sistema" />
-          <ProjectLink href="/equipe" icon={Users} title="Equipe" description="Quem está por trás do projeto" />
-        </div>
+        <h2 className="font-mono text-[10px] uppercase tracking-[0.22em] text-amber-accent">
+          Sobre o projeto
+        </h2>
+        <ul className="divide-y divide-border border-y border-border">
+          <ProjectLink href="/sobre" title="Sobre" hint="Manifesto e solução" />
+          <ProjectLink href="/dados" title="Dados de impacto" hint="Métricas em tempo real" />
+          <ProjectLink href="/equipe" title="Equipe" hint="16 autores + orientador" />
+        </ul>
       </section>
 
-      <form action={signOutAction}>
+      <form action={signOutAction} className="pt-2">
         <Button
           type="submit"
           variant="outline"
-          className="w-full font-mono uppercase tracking-wider"
+          className="w-full font-mono text-[11px] uppercase tracking-[0.2em] border-foreground/30 hover:border-foreground"
         >
           Sair
         </Button>
@@ -145,29 +158,65 @@ export default async function PerfilPage() {
   );
 }
 
-function ProjectLink({
-  href,
-  icon: Icon,
-  title,
-  description,
+function Row({
+  label,
+  value,
+  unit,
+  emphasis,
 }: {
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  description: string;
+  label: string;
+  value: string;
+  unit?: string;
+  emphasis?: boolean;
 }) {
   return (
-    <Link href={href}>
-      <Card className="p-3 flex items-center gap-3 hover:bg-muted/40 transition-colors">
-        <div className="rounded-full bg-primary/10 h-9 w-9 flex items-center justify-center flex-shrink-0">
-          <Icon className="h-4 w-4 text-primary" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-display text-sm font-semibold">{title}</p>
-          <p className="text-xs text-muted-foreground truncate">{description}</p>
-        </div>
-        <ExternalLink className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-      </Card>
-    </Link>
+    <div className="flex items-baseline justify-between py-3">
+      <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+        {label}
+      </span>
+      <span className="flex items-baseline gap-1">
+        <span
+          className={`font-stat tabular-nums leading-none ${
+            emphasis ? "text-2xl text-primary font-bold" : "text-lg text-foreground"
+          }`}
+        >
+          {value}
+        </span>
+        {unit && (
+          <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+            {unit}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function ProjectLink({
+  href,
+  title,
+  hint,
+}: {
+  href: string;
+  title: string;
+  hint: string;
+}) {
+  return (
+    <li>
+      <Link
+        href={href}
+        className="flex items-baseline justify-between py-3 hover:bg-muted/40 transition-colors -mx-4 px-4 group"
+      >
+        <span>
+          <p className="font-headline text-sm font-semibold text-foreground leading-none">
+            {title}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5">{hint}</p>
+        </span>
+        <span className="font-mono text-xs text-muted-foreground group-hover:text-primary transition-colors">
+          →
+        </span>
+      </Link>
+    </li>
   );
 }

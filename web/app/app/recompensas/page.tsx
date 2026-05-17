@@ -2,10 +2,7 @@ import { db } from "@/lib/db/client";
 import { rewards, profiles } from "@/lib/db/schema";
 import { eq, asc } from "drizzle-orm";
 import { createClient } from "@/lib/supabase/server";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { canAfford } from "@/lib/domain/rewards";
-import { Lock, Gift } from "lucide-react";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -29,55 +26,67 @@ export default async function RecompensasPage() {
     .where(eq(rewards.active, true))
     .orderBy(asc(rewards.costPoints));
 
+  const balance = profile?.totalPoints ?? 0;
+
   return (
-    <div className="p-4 space-y-4">
-      <header>
-        <h1 className="font-display text-2xl font-bold text-foreground">
+    <div className="px-4 py-5 space-y-5">
+      <header className="space-y-1">
+        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-amber-accent">
+          Catálogo
+        </p>
+        <h1 className="font-headline text-3xl font-bold text-primary leading-tight">
           Recompensas
         </h1>
         <p className="text-sm text-muted-foreground">
-          Você tem <strong>{profile?.totalPoints ?? 0}</strong> pts disponíveis.
+          <span className="font-stat text-base text-foreground tabular-nums">{balance}</span>
+          <span className="font-mono text-[10px] uppercase tracking-[0.2em] ml-1">pts disponíveis</span>
         </p>
       </header>
 
-      <ul className="space-y-3">
-        {items.map((reward) => {
-          const affordable = canAfford(profile?.totalPoints ?? 0, reward.costPoints);
+      <ul className="divide-y divide-border border-y border-border">
+        {items.map((reward, idx) => {
+          const affordable = canAfford(balance, reward.costPoints);
+          const missing = Math.max(0, reward.costPoints - balance);
           return (
             <li key={reward.id}>
               <Link
-                href={`/app/recompensas/${reward.id}`}
-                className={
-                  affordable
-                    ? "block"
-                    : "block pointer-events-none opacity-60"
-                }
+                href={affordable ? `/app/recompensas/${reward.id}` : "#"}
+                aria-disabled={!affordable}
+                tabIndex={affordable ? 0 : -1}
+                className={`block py-4 transition-colors group ${
+                  affordable ? "hover:bg-muted/40" : "opacity-55 pointer-events-none"
+                }`}
               >
-                <Card className="p-4 flex items-center gap-4">
-                  <div className="rounded-xl bg-muted h-16 w-16 flex items-center justify-center">
-                    {affordable ? (
-                      <Gift className="h-7 w-7 text-primary" />
-                    ) : (
-                      <Lock className="h-7 w-7 text-muted-foreground" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-display font-semibold truncate">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-[10px] tabular-nums text-muted-foreground w-6">
+                    {(idx + 1).toString().padStart(2, "0")}
+                  </span>
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    <p className="font-headline text-base font-semibold text-foreground leading-tight">
                       {reward.title}
                     </p>
-                    <p className="text-xs text-muted-foreground line-clamp-2">
+                    <p className="text-xs text-muted-foreground line-clamp-1">
                       {reward.description}
                     </p>
                   </div>
-                  <Badge variant={affordable ? "default" : "secondary"} className="font-mono">
-                    {reward.costPoints} pts
-                  </Badge>
-                </Card>
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-stat text-xl font-bold text-primary tabular-nums leading-none">
+                      {reward.costPoints}
+                    </p>
+                    <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground mt-0.5">
+                      {affordable ? "pts" : `–${missing}`}
+                    </p>
+                  </div>
+                </div>
               </Link>
             </li>
           );
         })}
       </ul>
+
+      <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground text-center pt-2">
+        {items.length} recompensas disponíveis
+      </p>
     </div>
   );
 }

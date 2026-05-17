@@ -37,82 +37,69 @@ export default async function DadosPage() {
 
   return (
     <>
-      {/* ============================================================
-       * HERO de dados — nosso impacto real, em destaque máximo
-       * ============================================================ */}
+      {/* PAINEL */}
       <section className="bg-mesh-eco bg-grain border-b border-border">
-        <div className="max-w-6xl mx-auto px-6 py-20 md:py-24 space-y-12 anim-editorial">
-          <header className="grid md:grid-cols-12 gap-8">
-            <div className="md:col-span-4 space-y-3">
-              <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] text-amber-accent">
-                <span className="inline-block w-8 h-px bg-amber-accent" />
-                <span>§ Painel</span>
-              </div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
-                Atualizado em tempo real <br />
-                a cada visita
-              </p>
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-12 md:py-20 space-y-10 anim-editorial">
+          <header className="space-y-3">
+            <div className="flex items-center gap-3 font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-amber-accent">
+              <span className="inline-block w-6 h-px bg-amber-accent" />
+              <span>Painel · tempo real</span>
             </div>
-            <div className="md:col-span-8">
-              <h1 className="font-headline text-5xl md:text-7xl font-bold text-primary leading-[0.92]">
-                Dados em
-                <span className="block italic font-medium text-foreground">
-                  números reais.
-                </span>
-              </h1>
-            </div>
+            <h1 className="font-headline text-4xl sm:text-5xl md:text-6xl font-bold text-primary leading-[0.92] max-w-2xl">
+              Dados em
+              <span className="block italic font-medium text-foreground">
+                números reais.
+              </span>
+            </h1>
           </header>
 
-          <div className="grid md:grid-cols-12 gap-x-6 gap-y-12 pt-8 border-t-2 border-primary/15">
-            <HeroStat
-              className="md:col-span-6"
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-8 md:gap-x-6 md:gap-y-10 pt-6 border-t-2 border-primary/15">
+            <BigStat
               value={completedCount.toString()}
-              label="Descartes registrados em produção"
-              source="Tabela sessions · status=completed"
+              label="Descartes registrados"
+              source="sessions · completed"
+              accent="primary"
+              span="col-span-2 md:col-span-1"
             />
-            <HeroStat
-              className="md:col-span-6"
+            <BigStat
               value={totalPoints.toString()}
-              label="Pontos creditados acumulados"
-              source="Soma de session.points_value"
-              accent
+              label="Pontos creditados"
+              source="soma de points_value"
+              accent="amber"
             />
-            <HeroStat
-              className="md:col-span-4"
+            <BigStat
               value={totalUsers.toString()}
               label="Pessoas cadastradas"
-              source="Tabela auth.users + profiles"
-              size="md"
+              source="profiles"
+              accent="primary"
             />
-            <HeroStat
-              className="md:col-span-4"
-              value={`${estimatedKg}`}
+            <BigStat
+              value={estimatedKg}
               unit="kg"
-              label="Estimativa de massa de plástico equivalente"
-              source="0,05 kg/pt (heurística)"
-              size="md"
+              label="Plástico equivalente"
+              source="0,05 kg/pt"
+              accent="primary"
             />
-            <HeroStat
-              className="md:col-span-4"
+            <BigStat
               value={sessionsByMaterial.length.toString()}
-              label="Categorias de material recicladas"
-              source="Distinct material em sessions"
-              size="md"
+              label="Materiais reciclados"
+              source="distinct material"
+              accent="amber"
             />
           </div>
 
           {sessionsByMaterial.length > 0 && (
-            <div className="grid md:grid-cols-12 gap-6 pt-8 border-t border-primary/15">
-              <p className="md:col-span-3 font-mono text-[10px] uppercase tracking-[0.3em] text-amber-accent self-start mt-1">
-                Por material
+            <div className="pt-6 border-t border-primary/15">
+              <p className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-amber-accent mb-3">
+                Distribuição por material
               </p>
-              <ul className="md:col-span-9 grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <ul className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {sessionsByMaterial.map((row) => (
-                  <li key={row.material ?? "outros"} className="space-y-1 border-l-2 border-primary pl-3">
-                    <p className="font-stat text-4xl text-foreground tabular-nums">
+                  <li key={row.material ?? "outros"} className="border-l-2 border-primary pl-3 py-1">
+                    <p className="font-stat text-3xl md:text-4xl text-foreground tabular-nums leading-none">
                       {row.total}
                     </p>
-                    <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                    <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground mt-1">
                       {row.material
                         ? MATERIAL_LABELS[row.material as keyof typeof MATERIAL_LABELS]
                         : "Outros"}
@@ -125,60 +112,39 @@ export default async function DadosPage() {
         </div>
       </section>
 
-      {/* ============================================================
-       * PROBLEMA — dark editorial, mesmo padrão da home
-       * ============================================================ */}
+      {/* PROBLEMA */}
       <section className="bg-foreground text-background bg-grain">
-        <div className="max-w-6xl mx-auto px-6 py-24 md:py-32 space-y-16">
-          <div className="grid md:grid-cols-12 gap-8 items-end">
-            <p className="md:col-span-3 font-mono text-[10px] uppercase tracking-[0.3em] text-amber-accent">
-              § 02 — o problema
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-14 md:py-24 space-y-10 md:space-y-14">
+          <div className="grid md:grid-cols-12 gap-4 md:gap-8 items-end">
+            <p className="md:col-span-3 font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-amber-accent">
+              § 02 · O problema
             </p>
-            <h2 className="md:col-span-9 font-headline text-4xl md:text-6xl font-bold leading-[0.95]">
-              A Amazônia tem
+            <h2 className="md:col-span-9 font-headline text-3xl sm:text-4xl md:text-6xl font-bold leading-[0.95]">
+              A pior gestão
               <span className="block italic font-medium text-amber-accent">
-                a pior gestão
+                de resíduos
               </span>
-              de resíduos do Brasil.
+              do Brasil.
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20">
-            <DarkStat
-              number="91,9%"
-              label="dos municípios do Amazonas ainda usam lixões a céu aberto"
-              source="IBGE · Pesquisa Nacional de Saneamento Básico, 2024"
-            />
-            <DarkStat
-              number="182 k"
-              unit="ton"
-              label="de plástico despejadas nos rios amazônicos por ano"
-              source="UFPA · Oceana Brasil, 2024"
-            />
-            <DarkStat
-              number="98%"
-              label="das espécies de peixes analisadas contêm microplásticos"
-              source="Oceana Brasil, 2024"
-            />
-            <DarkStat
-              number="3 mil"
-              label="lixões ainda ativos no território brasileiro"
-              source="ABREMA, 2025"
-            />
+          <div className="grid grid-cols-2 md:grid-cols-2 gap-x-4 gap-y-10 md:gap-x-12 md:gap-y-14">
+            <DarkStat number="91,9%" label="dos municípios do AM usam lixões" source="IBGE, 2024" />
+            <DarkStat number="182k" unit="t" label="de plástico nos rios/ano" source="UFPA, 2024" />
+            <DarkStat number="98%" label="das espécies de peixes têm microplástico" source="Oceana Brasil, 2024" />
+            <DarkStat number="3 mil" label="lixões ativos no Brasil" source="ABREMA, 2025" />
           </div>
         </div>
       </section>
 
-      {/* ============================================================
-       * CUSTO ECONÔMICO
-       * ============================================================ */}
+      {/* CUSTO */}
       <section className="bg-background">
-        <div className="max-w-6xl mx-auto px-6 py-24 md:py-32 space-y-16">
-          <div className="grid md:grid-cols-12 gap-8 items-end">
-            <p className="md:col-span-3 font-mono text-[10px] uppercase tracking-[0.3em] text-amber-accent">
-              § 03 — o custo
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-14 md:py-24 space-y-10 md:space-y-14">
+          <div className="grid md:grid-cols-12 gap-4 md:gap-8 items-end">
+            <p className="md:col-span-3 font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-amber-accent">
+              § 03 · O custo
             </p>
-            <h2 className="md:col-span-9 font-headline text-4xl md:text-6xl font-bold text-primary leading-[0.95]">
+            <h2 className="md:col-span-9 font-headline text-3xl sm:text-4xl md:text-6xl font-bold text-primary leading-[0.95]">
               Descarte ruim
               <span className="block italic font-medium text-foreground">
                 custa caro.
@@ -186,41 +152,23 @@ export default async function DadosPage() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 md:gap-20">
-            <LightStat
-              number="R$ 120 bi"
-              label="é a perda anual estimada no Brasil"
-              source="EMBRAPA, 2025"
-            />
-            <LightStat
-              number="R$ 90 bi"
-              label="em externalidades adicionais (saúde, contaminação)"
-              source="ABREMA, 2025"
-            />
-            <LightStat
-              number="344 mil"
-              label="internações SUS/ano por saneamento inadequado"
-              source="Instituto Trata Brasil"
-            />
-            <LightStat
-              number="4,5–8%"
-              label="é tudo o que o Brasil recicla — potencial é 33,6%"
-              source="EMBRAPA, 2025"
-            />
+          <div className="grid grid-cols-2 md:grid-cols-2 gap-x-4 gap-y-10 md:gap-x-12 md:gap-y-14">
+            <LightStat number="R$ 120bi" label="perda anual no Brasil" source="EMBRAPA, 2025" />
+            <LightStat number="R$ 90bi" label="custos extras de saúde" source="ABREMA, 2025" />
+            <LightStat number="344k" label="internações SUS/ano por saneamento" source="Trata Brasil" />
+            <LightStat number="4,5%" label="é o que o Brasil recicla (potencial: 33,6%)" source="EMBRAPA, 2025" />
           </div>
         </div>
       </section>
 
-      {/* ============================================================
-       * INCENTIVOS DISPONÍVEIS — accent positivo
-       * ============================================================ */}
+      {/* INCENTIVOS */}
       <section className="bg-amber-accent/10 border-y border-amber-accent/30">
-        <div className="max-w-6xl mx-auto px-6 py-24 md:py-32 space-y-16">
-          <div className="grid md:grid-cols-12 gap-8 items-end">
-            <p className="md:col-span-3 font-mono text-[10px] uppercase tracking-[0.3em] text-primary">
-              § 04 — os incentivos
+        <div className="max-w-6xl mx-auto px-4 md:px-6 py-14 md:py-24 space-y-10 md:space-y-14">
+          <div className="grid md:grid-cols-12 gap-4 md:gap-8 items-end">
+            <p className="md:col-span-3 font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-primary">
+              § 04 · Os incentivos
             </p>
-            <h2 className="md:col-span-9 font-headline text-4xl md:text-6xl font-bold text-primary leading-[0.95]">
+            <h2 className="md:col-span-9 font-headline text-3xl sm:text-4xl md:text-6xl font-bold text-primary leading-[0.95]">
               Mecanismos legais
               <span className="block italic font-medium text-foreground">
                 já existem.
@@ -228,28 +176,16 @@ export default async function DadosPage() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-            <LightStat
-              number="5–20%"
-              label="desconto IPTU Verde Manaus"
-              source="PL 128/2025 · Câmara Municipal de Manaus"
-            />
-            <LightStat
-              number="R$ 2 mi"
-              label="distribuídos em créditos Ecoenel em 2025"
-              source="Relatório Enel · 2025"
-            />
-            <LightStat
-              number="R$ 530 mi"
-              label="aprovados na Lei de Incentivo à Reciclagem"
-              source="Câmara dos Deputados · 2025"
-            />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 md:gap-10">
+            <LightStat number="5–20%" label="desconto IPTU Verde Manaus" source="PL 128/2025 · CMM" />
+            <LightStat number="R$ 2mi" label="em créditos Ecoenel em 2025" source="Enel, 2025" />
+            <LightStat number="R$ 530mi" label="aprovados na LIR" source="Câmara, 2025" />
           </div>
 
-          <p className="font-headline text-2xl md:text-3xl italic font-medium text-foreground/85 max-w-3xl leading-snug pt-8 border-t border-amber-accent/30">
+          <p className="font-headline text-xl md:text-3xl italic font-medium text-foreground/85 max-w-3xl leading-snug pt-8 border-t border-amber-accent/30">
             “O incentivo existe. A barreira é{" "}
             <span className="text-primary not-italic font-bold">a comprovação</span>.
-            É aí que o Amazonas Recicla entra.”
+            É aí que entramos.”
           </p>
         </div>
       </section>
@@ -257,44 +193,38 @@ export default async function DadosPage() {
   );
 }
 
-// ============================================================
-// Stat displays — três variantes para diferentes contextos
-// ============================================================
-
-function HeroStat({
+function BigStat({
   value,
   label,
   source,
   unit,
-  accent,
-  size = "lg",
-  className = "",
+  accent = "primary",
+  span = "",
 }: {
   value: string;
   label: string;
   source: string;
   unit?: string;
-  accent?: boolean;
-  size?: "md" | "lg";
-  className?: string;
+  accent?: "primary" | "amber";
+  span?: string;
 }) {
-  const sizeClass = size === "lg" ? "text-7xl md:text-9xl" : "text-5xl md:text-7xl";
-  const valueColor = accent ? "text-amber-accent" : "text-primary";
-
+  const color = accent === "amber" ? "text-amber-accent" : "text-primary";
   return (
-    <div className={`space-y-3 ${className}`}>
-      <div className="flex items-start gap-2">
-        <p className={`font-stat ${sizeClass} ${valueColor} tabular-nums`}>{value}</p>
+    <div className={`space-y-2 ${span}`}>
+      <div className="flex items-baseline gap-1">
+        <p className={`font-stat text-5xl sm:text-6xl md:text-7xl ${color} tabular-nums leading-none`}>
+          {value}
+        </p>
         {unit && (
-          <span className="font-mono text-xs uppercase tracking-widest text-muted-foreground mt-2">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
             {unit}
           </span>
         )}
       </div>
-      <p className="text-base md:text-lg text-foreground/85 leading-snug max-w-sm">
+      <p className="text-sm md:text-base text-foreground/85 leading-snug">
         {label}
       </p>
-      <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+      <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
         {source}
       </p>
     </div>
@@ -313,22 +243,22 @@ function DarkStat({
   unit?: string;
 }) {
   return (
-    <div className="space-y-4">
-      <div className="flex items-start gap-2">
-        <p className="font-stat text-[5rem] md:text-[8rem] text-background tabular-nums">
+    <div className="space-y-3">
+      <div className="flex items-baseline gap-1">
+        <p className="font-stat text-4xl sm:text-5xl md:text-7xl text-background tabular-nums leading-none">
           {number}
         </p>
         {unit && (
-          <span className="font-mono text-xs uppercase tracking-widest text-background/60 mt-3">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-background/60">
             {unit}
           </span>
         )}
       </div>
-      <div className="pl-4 border-l-2 border-amber-accent space-y-2">
-        <p className="text-lg md:text-xl text-background/90 leading-snug max-w-xs">
+      <div className="pl-3 border-l-2 border-amber-accent space-y-1.5">
+        <p className="text-sm md:text-base text-background/85 leading-snug">
           {label}
         </p>
-        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-background/50">
+        <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-background/45">
           {source}
         </p>
       </div>
@@ -346,13 +276,13 @@ function LightStat({
   source: string;
 }) {
   return (
-    <div className="space-y-4">
-      <p className="font-stat text-[5rem] md:text-[7rem] text-primary tabular-nums">
+    <div className="space-y-3">
+      <p className="font-stat text-4xl sm:text-5xl md:text-7xl text-primary tabular-nums leading-none">
         {number}
       </p>
-      <div className="pl-4 border-l-2 border-amber-accent space-y-2">
-        <p className="text-lg text-foreground/85 leading-snug max-w-xs">{label}</p>
-        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+      <div className="pl-3 border-l-2 border-amber-accent space-y-1.5">
+        <p className="text-sm md:text-base text-foreground/85 leading-snug">{label}</p>
+        <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-muted-foreground">
           {source}
         </p>
       </div>

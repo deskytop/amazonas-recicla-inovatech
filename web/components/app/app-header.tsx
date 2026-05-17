@@ -2,7 +2,6 @@ import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db/client";
 import { profiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
-import { Sprout } from "lucide-react";
 import Link from "next/link";
 
 export async function AppHeader() {
@@ -22,22 +21,25 @@ export async function AppHeader() {
     .limit(1);
 
   return (
-    <header className="sticky top-0 z-30 bg-background/95 backdrop-blur border-b border-border">
+    <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border">
       <div className="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
-        <Link href="/app" className="flex items-center gap-2">
-          <div className="rounded-full bg-primary text-primary-foreground h-7 w-7 flex items-center justify-center">
-            <Sprout className="h-4 w-4" />
-          </div>
-          <span className="font-display font-bold text-primary text-sm">
-            Amazonas Recicla
+        <Link href="/app" className="flex items-baseline gap-1 group">
+          <span className="font-headline text-base font-bold text-primary leading-none">
+            Amazonas
           </span>
+          <span className="text-amber-accent text-base leading-none">.</span>
         </Link>
         {profile && (
           <Link
             href="/app/perfil"
-            className="rounded-full bg-primary/10 text-primary px-3 py-1 font-mono text-xs font-bold tabular-nums hover:bg-primary/20 transition-colors"
+            className="inline-flex items-baseline gap-1.5 px-3 py-1.5 border border-primary/30 hover:border-primary hover:bg-primary/5 transition-colors"
           >
-            {profile.totalPoints} pts
+            <span className="font-stat text-base font-bold text-primary tabular-nums leading-none">
+              {profile.totalPoints}
+            </span>
+            <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground leading-none">
+              pts
+            </span>
           </Link>
         )}
       </div>

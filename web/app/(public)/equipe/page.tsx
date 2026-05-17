@@ -9,107 +9,84 @@ function initialsOf(name: string): string {
   return `${first}${last}`.toUpperCase();
 }
 
-// Cor accent variável pros cards de aluno — distribui em 4 tons que combinam
-// com o tema, criando ritmo visual sem ruído.
-const STUDENT_TONES = [
-  "border-primary/30 hover:border-primary",
-  "border-amber-accent/40 hover:border-amber-accent",
-  "border-secondary/30 hover:border-secondary",
-  "border-foreground/20 hover:border-foreground",
+// Distribui tons levemente diferentes pros cards pra criar ritmo
+const TONES = [
+  "border-primary/40",
+  "border-amber-accent/50",
+  "border-secondary/40",
+  "border-foreground/25",
 ] as const;
 
 export default function EquipePage() {
   return (
-    <div className="bg-grain">
-      <div className="max-w-6xl mx-auto px-6 py-24 md:py-32 space-y-20">
-        <header className="grid md:grid-cols-12 gap-8 anim-editorial">
-          <div className="md:col-span-4 space-y-3">
-            <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.3em] text-amber-accent">
-              <span className="inline-block w-8 h-px bg-amber-accent" />
-              <span>§ Créditos</span>
-            </div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
-              Inov@tech · FAMETRO 2026<br />
-              Engenharia da Computação<br />
-              6º período Noturno
-            </p>
-          </div>
-          <div className="md:col-span-8">
-            <h1 className="font-headline text-5xl md:text-7xl font-bold text-primary leading-[0.92]">
-              Quem está
-              <span className="block italic font-medium text-foreground">
-                por trás.
-              </span>
-            </h1>
-          </div>
-        </header>
+    <div className="max-w-3xl mx-auto px-4 md:px-6 py-12 md:py-20 space-y-12 md:space-y-16 bg-grain">
+      <header className="space-y-4 anim-editorial">
+        <div className="flex items-center gap-3 font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-amber-accent">
+          <span className="inline-block w-6 h-px bg-amber-accent" />
+          <span>Créditos</span>
+        </div>
+        <h1 className="font-headline text-4xl sm:text-5xl md:text-6xl font-bold text-primary leading-[0.92]">
+          Quem está
+          <span className="block italic font-medium text-foreground">
+            por trás.
+          </span>
+        </h1>
+        <p className="font-mono text-[10px] md:text-[11px] uppercase tracking-[0.22em] text-muted-foreground leading-relaxed">
+          Inov@tech · FAMETRO 2026 · Engenharia da Computação · 6º período Noturno
+        </p>
+      </header>
 
-        <section className="grid md:grid-cols-12 gap-8 items-end anim-editorial">
-          <p className="md:col-span-3 font-mono text-[10px] uppercase tracking-[0.3em] text-amber-accent">
-            01 — orientação
+      <section className="space-y-3 anim-editorial">
+        <p className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-amber-accent">
+          01 · Orientação
+        </p>
+        <div className="border-t-2 border-primary pt-4 flex items-center gap-4">
+          <div className="flex-shrink-0 w-16 h-16 md:w-20 md:h-20 bg-primary text-primary-foreground flex items-center justify-center font-headline text-xl md:text-2xl font-bold shadow-editorial">
+            {initialsOf(ADVISOR.name)}
+          </div>
+          <div className="space-y-1 flex-1 min-w-0">
+            <p className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.22em] text-amber-accent">
+              {ADVISOR.role}
+            </p>
+            <h2 className="font-headline text-lg md:text-2xl font-bold text-primary leading-tight">
+              {ADVISOR.name}
+            </h2>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3 anim-editorial">
+        <div className="flex items-baseline justify-between">
+          <p className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.25em] text-amber-accent">
+            02 · Autores
           </p>
-          <div className="md:col-span-9">
-            <div className="border-t-2 border-primary pt-6 grid md:grid-cols-12 gap-6 items-center">
-              <div className="md:col-span-3">
-                <div className="aspect-square max-w-[180px] bg-primary text-primary-foreground flex items-center justify-center font-headline text-5xl font-bold shadow-editorial">
-                  {initialsOf(ADVISOR.name)}
-                </div>
-              </div>
-              <div className="md:col-span-9 space-y-3">
-                <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-amber-accent">
-                  {ADVISOR.role}
-                </p>
-                <h2 className="font-headline text-3xl md:text-4xl font-bold text-primary leading-tight">
-                  {ADVISOR.name}
-                </h2>
-                <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
-                  Responsável pela direção acadêmica e revisão metodológica do projeto.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="grid md:grid-cols-12 gap-8 anim-editorial">
-          <div className="md:col-span-3">
-            <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-amber-accent">
-              02 — autores
-            </p>
-            <p className="font-stat text-7xl md:text-8xl text-foreground mt-3 tabular-nums">
-              {STUDENTS.length.toString().padStart(2, "0")}
-            </p>
-            <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground -mt-2">
-              colaboradores
-            </p>
-          </div>
-          <div className="md:col-span-9">
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t-2 border-primary pt-6">
-              {STUDENTS.map((student, idx) => (
-                <li key={student.name}>
-                  <article
-                    className={`p-5 border-l-4 bg-card transition-all ${
-                      STUDENT_TONES[idx % STUDENT_TONES.length]
-                    } hover:shadow-editorial flex items-center gap-4 h-full`}
-                  >
-                    <div className="flex-shrink-0 w-12 h-12 bg-foreground/5 flex items-center justify-center font-headline text-base font-bold text-foreground tabular-nums">
-                      {(idx + 1).toString().padStart(2, "0")}
-                    </div>
-                    <p className="font-headline text-base font-semibold leading-tight text-foreground">
-                      {student.name}
-                    </p>
-                  </article>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        <footer className="grid md:grid-cols-12 gap-8 border-t border-primary/15 pt-8">
-          <p className="md:col-span-12 font-mono text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
-            Trabalho apresentado na Feira de Inovações Tecnológicas da FAMETRO — Inov@tech 2026 · Manaus · Amazonas
+          <p className="font-mono text-[10px] md:text-xs uppercase tracking-[0.22em] text-muted-foreground">
+            {STUDENTS.length} colaboradores
           </p>
-        </footer>
-      </div>
+        </div>
+        <ul className="border-t-2 border-primary pt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {STUDENTS.map((student, idx) => (
+            <li key={student.name}>
+              <article
+                className={`px-3 py-2.5 border-l-2 bg-card flex items-center gap-3 ${TONES[idx % TONES.length]}`}
+              >
+                <span className="font-mono text-[10px] tabular-nums text-muted-foreground w-5">
+                  {(idx + 1).toString().padStart(2, "0")}
+                </span>
+                <p className="font-headline text-sm font-semibold leading-tight text-foreground">
+                  {student.name}
+                </p>
+              </article>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <footer className="border-t border-primary/15 pt-5">
+        <p className="font-mono text-[9px] md:text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+          Trabalho apresentado na Feira de Inovações Tecnológicas da FAMETRO. Manaus, Amazonas.
+        </p>
+      </footer>
     </div>
   );
 }
