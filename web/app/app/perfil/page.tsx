@@ -2,13 +2,14 @@ import { createClient } from "@/lib/supabase/server";
 import { db } from "@/lib/db/client";
 import { profiles, redemptions, rewards } from "@/lib/db/schema";
 import { eq, and, desc } from "drizzle-orm";
+import Link from "next/link";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { LevelBadge } from "@/components/app/level-badge";
 import { BadgeCard } from "@/components/app/badge-card";
 import { signOutAction } from "@/lib/actions/sign-out";
-import { Award } from "lucide-react";
+import { Award, Info, BarChart3, Users, ExternalLink } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -122,6 +123,15 @@ export default async function PerfilPage() {
         )}
       </section>
 
+      <section className="space-y-2">
+        <h2 className="font-display font-semibold">Sobre o projeto</h2>
+        <div className="grid grid-cols-1 gap-2">
+          <ProjectLink href="/sobre" icon={Info} title="Sobre o Amazonas Recicla" description="Problema, solução e objetivos do projeto" />
+          <ProjectLink href="/dados" icon={BarChart3} title="Dados de impacto" description="Estatísticas em tempo real do sistema" />
+          <ProjectLink href="/equipe" icon={Users} title="Equipe" description="Quem está por trás do projeto" />
+        </div>
+      </section>
+
       <form action={signOutAction}>
         <Button
           type="submit"
@@ -132,5 +142,32 @@ export default async function PerfilPage() {
         </Button>
       </form>
     </div>
+  );
+}
+
+function ProjectLink({
+  href,
+  icon: Icon,
+  title,
+  description,
+}: {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+}) {
+  return (
+    <Link href={href}>
+      <Card className="p-3 flex items-center gap-3 hover:bg-muted/40 transition-colors">
+        <div className="rounded-full bg-primary/10 h-9 w-9 flex items-center justify-center flex-shrink-0">
+          <Icon className="h-4 w-4 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-display text-sm font-semibold">{title}</p>
+          <p className="text-xs text-muted-foreground truncate">{description}</p>
+        </div>
+        <ExternalLink className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+      </Card>
+    </Link>
   );
 }
