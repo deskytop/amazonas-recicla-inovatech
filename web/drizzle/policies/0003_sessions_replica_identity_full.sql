@@ -1,0 +1,47 @@
+-- =============================================================================
+-- Realtime — REPLICA IDENTITY FULL na tabela sessions
+-- =============================================================================
+-- Problema:
+--   A pagina /app/sessao/[token] usa filtro `token=eq.X` no postgres_changes.
+--   Por default, o Postgres so inclui colunas da PRIMARY KEY (id) no payload
+--   de replicacao em UPDATEs. Como `token` nao e PK (e coluna unica, mas a PK
+--   e `id`), o servidor Realtime descarta o evento antes de avaliar o filtro,
+--   e o cliente subscrito nunca recebe nada.
+--
+--   Sintoma: o ESP32 manda /classify e /complete (backend grava tudo certo,
+--   pontos creditados), mas a pagina fica fixa em "Deposite o residuo" ate
+--   o cronometro expirar. So atualiza ao recarregar.
+--
+-- Fix:
+--   REPLICA IDENTITY FULL faz o Postgres replicar a linha inteira (todas as
+--   colunas) em UPDATEs e DELETEs. Assim qualquer filtro do Realtime pode
+--   funcionar.
+--
+--   Custo: payload maior na replicacao. Pra tabela de sessions (volume
+--   baixo, poucos campos), e irrelevante.
+--
+-- Como rodar:
+--   1. Supabase Dashboard -> SQL Editor -> New query
+--   2. Cola este arquivo INTEIRO
+--   3. Run (Ctrl+Enter)
+--
+-- Idempotente: pode rodar varias vezes.
+-- =============================================================================
+
+alter table public.sessions replica identity full;
+
+
+-- =============================================================================
+-- Verificacao (rode no final pra confirmar):
+--
+--   select relname, relreplident
+--   from pg_class
+--   where relname = 'sessions'
+--     and relnamespace = 'public'::regnamespace;
+--
+-- relreplident esperado: `f` (FULL).
+--   d = default  (so PK)         <-- estava assim, nao funciona pra filtros non-PK
+--   f = full     (todas colunas) <-- queremos isso
+--   n = nothing
+--   i = index
+-- =============================================================================

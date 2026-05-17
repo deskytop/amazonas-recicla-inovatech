@@ -22,36 +22,58 @@ export function SessionView({ initialSession }: { initialSession: SessionState }
 
   useEffect(() => {
     const supabase = createClient();
-    const channel = supabase
-      .channel(`session:${session.token}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "sessions",
-          filter: `token=eq.${session.token}`,
-        },
-        (payload) => {
-          const row = payload.new as {
-            status: SessionStatus;
-            material: Material | null;
-            points_value: number | null;
-            expires_at: string;
-          };
-          setSession((prev) => ({
-            ...prev,
-            status: row.status,
-            material: row.material,
-            pointsValue: row.points_value,
-            expiresAt: row.expires_at,
-          }));
-        },
-      )
-      .subscribe();
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    let cancelled = false;
+
+    (async () => {
+      const {
+        data: { session: authSession },
+      } = await supabase.auth.getSession();
+      if (cancelled || !authSession) return;
+
+      // Auth explicito antes do subscribe: garante que o JWT chegue na join
+      // do canal pra RLS aprovar a leitura da row.
+      await supabase.realtime.setAuth(authSession.access_token);
+      if (cancelled) return;
+
+      channel = supabase
+        .channel(`session:${session.token}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "sessions",
+            filter: `token=eq.${session.token}`,
+          },
+          (payload) => {
+            const row = payload.new as {
+              status: SessionStatus;
+              material: Material | null;
+              points_value: number | null;
+              expires_at: string;
+            };
+            setSession((prev) => ({
+              ...prev,
+              status: row.status,
+              material: row.material,
+              pointsValue: row.points_value,
+              expiresAt: row.expires_at,
+            }));
+          },
+        )
+        .subscribe((status, err) => {
+          // eslint-disable-next-line no-console
+          console.log(
+            `[realtime] session:${session.token} status=${status}`,
+            err ?? "",
+          );
+        });
+    })();
 
     return () => {
-      supabase.removeChannel(channel);
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
     };
   }, [session.token]);
 
