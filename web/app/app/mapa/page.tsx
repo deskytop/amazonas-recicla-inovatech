@@ -1,14 +1,28 @@
 import { db } from "@/lib/db/client";
 import { bins } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and, isNotNull } from "drizzle-orm";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { BinMap } from "@/components/app/bin-map";
 import { MapPin, Circle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
 export default async function MapaPage() {
-  const activeBins = await db.select().from(bins).where(eq(bins.status, "active"));
+  const activeBins = await db
+    .select()
+    .from(bins)
+    .where(and(eq(bins.status, "active"), isNotNull(bins.latitude), isNotNull(bins.longitude)));
+
+  const binsForMap = activeBins
+    .filter((b) => b.latitude !== null && b.longitude !== null)
+    .map((b) => ({
+      id: b.id,
+      code: b.code,
+      locationName: b.locationName,
+      latitude: Number(b.latitude!),
+      longitude: Number(b.longitude!),
+    }));
 
   return (
     <div className="p-4 space-y-4">
@@ -19,15 +33,7 @@ export default async function MapaPage() {
         </p>
       </header>
 
-      <Card className="p-12 bg-muted/40 text-center space-y-3 border-dashed">
-        <MapPin className="h-10 w-10 mx-auto text-muted-foreground" />
-        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">
-          Mapa interativo
-        </p>
-        <p className="text-sm text-muted-foreground max-w-xs mx-auto">
-          Em breve — durante a Inov@tech a lixeira está fixa no estande FAMETRO.
-        </p>
-      </Card>
+      <BinMap bins={binsForMap} />
 
       <section className="space-y-2">
         <h2 className="font-display text-lg font-semibold">
