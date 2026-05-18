@@ -1,27 +1,25 @@
 // =============================================================================
 // Amazonas Recicla — Firmware ESP32 (gateway DevKit 38-pin)
 //
-// Sketch 3: classificacao REAL via Claude vision no backend.
+// Sketch 4: classificacao via Claude vision, SEM reflashar o CAM.
 //
-// Arquitetura distribuida em 2 camadas:
-//   ESP32-CAM (firmware amazonas-recicla-cam)  ──UART──>  ESP32 DevKit (este)
-//                                                              │
-//                                                              ▼ HTTPS
-//                                                         Backend Vercel
-//                                                              │
-//                                                              ▼
-//                                                         Claude Sonnet 4.6
-//                                                         (vision)
+// Estrategia: o ESP32-CAM continua com o CameraWebServer (firmware default),
+// que expoe um AP aberto `ESP32-CAM-MB` com endpoint HTTP `/capture` que
+// retorna um JPEG. O DevKit (este firmware) faz Wi-Fi switching:
 //
-// Quando detecta sessao ativa:
-//   1. Espera DEPOSIT_DELAY_MS pra usuario depositar o material
-//   2. Manda "CAPTURE\n" pro CAM via UART2
-//   3. Recebe header "JPEG <bytes>\n" e os bytes brutos do JPEG
-//   4. POST esses bytes pro /api/sessions/<token>/classify-image
-//   5. Backend chama Claude vision, retorna {material, pointsValue, ...}
-//   6. Manda /complete e volta a IDLE
+//   Idle/heartbeat/polling → rede de casa (STA, Wi-Fi do usuario)
+//   Quando precisa de foto:
+//     1) salva credenciais da rede de casa
+//     2) desconecta, conecta no AP do CAM (192.168.4.1)
+//     3) HTTP GET /capture → recebe JPEG
+//     4) desconecta, reconecta na rede de casa
+//     5) HTTPS POST /api/sessions/{token}/classify-image com o JPEG
+//     6) backend chama Claude Sonnet 4.6 vision
+//     7) HTTPS POST /complete
 //
-// Hardware testado: ESP32 DevKit 38-pin com CP2102 (USB direto no laptop).
+// Esse switching custa ~10-15s por captura. Aceitavel pro demo da feira.
+//
+// Hardware: ESP32 DevKit 38-pin com CP2102 (USB direto no laptop).
 // =============================================================================
 
 #include <WiFi.h>
@@ -37,9 +35,9 @@
 // Maquina de estados
 // -----------------------------------------------------------------------------
 enum FirmwareState {
-  STATE_IDLE,             // polling /active-session
+  STATE_IDLE,             // polling /active-session na rede de casa
   STATE_SESSION_ACTIVE,   // sessao detectada, aguardando deposit delay
-  STATE_CLASSIFYING,      // captura foto + POST /classify-image
+  STATE_CLASSIFYING,      // switching Wi-Fi + captura + POST /classify-image
   STATE_COMPLETING        // POST /complete
 };
 
@@ -53,7 +51,10 @@ uint32_t      heartbeatCount  = 0;
 String currentToken;
 String currentUserName;
 
-HardwareSerial CamSerial(2);   // UART2 do DevKit
+// Credenciais da rede de casa — capturadas no boot, usadas pra reconectar
+// depois do switch pro AP do CAM.
+String homeSSID;
+String homePSK;
 
 struct HttpResult {
   int    code;
@@ -75,13 +76,16 @@ void setup() {
 
   pinMode(WIFI_RESET_PIN, INPUT_PULLUP);
 
-  // UART2 pra falar com a ESP32-CAM.
-  CamSerial.begin(CAM_UART_BAUD, SERIAL_8N1, CAM_UART_RX_PIN, CAM_UART_TX_PIN);
-  Serial.print(F("[cam] UART2 aberta em "));
-  Serial.print(CAM_UART_BAUD);
-  Serial.println(F(" baud"));
-
+  WiFi.mode(WIFI_STA);
   connectWifi();
+
+  // Captura credenciais da rede de casa — vamos precisar reconectar depois
+  // do switch pro AP do CAM.
+  homeSSID = WiFi.SSID();
+  homePSK  = WiFi.psk();
+  Serial.print(F("[wifi] rede de casa salva: "));
+  Serial.println(homeSSID);
+
   setState(STATE_IDLE);
 }
 
@@ -91,22 +95,22 @@ void setup() {
 void loop() {
   checkWifiResetButton();
 
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println(F("[wifi] Conexao caiu, tentando reconectar..."));
-    WiFi.reconnect();
-    delay(2000);
+  // Heartbeat e polling so rodam quando estamos na rede de casa (IDLE ou
+  // depois de switching).
+  if (WiFi.status() != WL_CONNECTED && currentState == STATE_IDLE) {
+    Serial.println(F("[wifi] Sem rede em IDLE, tentando reconectar..."));
+    reconnectHome();
+    delay(500);
     return;
   }
 
-  // Heartbeat roda independente do estado.
   const unsigned long now = millis();
-  if (now - lastHeartbeatMs >= HEARTBEAT_INTERVAL_MS || lastHeartbeatMs == 0) {
-    lastHeartbeatMs = now;
-    sendHeartbeat();
+  if (currentState == STATE_IDLE) {
+    if (now - lastHeartbeatMs >= HEARTBEAT_INTERVAL_MS || lastHeartbeatMs == 0) {
+      lastHeartbeatMs = now;
+      sendHeartbeat();
+    }
   }
-
-  // Logs do CAM (debug):
-  drainCamLogs();
 
   tickStateMachine();
   delay(50);
@@ -136,6 +140,60 @@ void connectWifi() {
   Serial.println(F(" dBm"));
 }
 
+bool reconnectHome() {
+  Serial.print(F("[wifi] reconectando rede de casa: "));
+  Serial.println(homeSSID);
+  WiFi.disconnect(true, false);
+  delay(300);
+  WiFi.mode(WIFI_STA);
+  if (homePSK.length() > 0) {
+    WiFi.begin(homeSSID.c_str(), homePSK.c_str());
+  } else {
+    WiFi.begin(homeSSID.c_str());
+  }
+  const unsigned long t0 = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - t0) < HOME_RECONNECT_TIMEOUT_MS) {
+    delay(200);
+    Serial.print(".");
+  }
+  Serial.println();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print(F("[wifi] reconectado, IP: "));
+    Serial.println(WiFi.localIP());
+    return true;
+  } else {
+    Serial.println(F("[wifi] FALHA ao reconectar rede de casa"));
+    return false;
+  }
+}
+
+bool connectToCamAP() {
+  Serial.print(F("[wifi] conectando no AP do CAM: "));
+  Serial.println(CAM_AP_SSID);
+  WiFi.disconnect(true, false);
+  delay(300);
+  WiFi.mode(WIFI_STA);
+  if (strlen(CAM_AP_PASSWORD) > 0) {
+    WiFi.begin(CAM_AP_SSID, CAM_AP_PASSWORD);
+  } else {
+    WiFi.begin(CAM_AP_SSID);
+  }
+  const unsigned long t0 = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - t0) < CAM_CONNECT_TIMEOUT_MS) {
+    delay(200);
+    Serial.print(".");
+  }
+  Serial.println();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print(F("[wifi] conectado no AP do CAM, IP: "));
+    Serial.println(WiFi.localIP());
+    return true;
+  } else {
+    Serial.println(F("[wifi] FALHA ao conectar no AP do CAM"));
+    return false;
+  }
+}
+
 void checkWifiResetButton() {
   if (digitalRead(WIFI_RESET_PIN) == LOW) {
     if (buttonPressedMs == 0) {
@@ -157,7 +215,7 @@ void checkWifiResetButton() {
 // -----------------------------------------------------------------------------
 // Helpers HTTP
 // -----------------------------------------------------------------------------
-HttpResult httpRequest(const String& path, const char* method, const String& body) {
+HttpResult httpsRequest(const String& path, const char* method, const String& body) {
   HttpResult result = {0, ""};
   WiFiClientSecure client;
   client.setInsecure();
@@ -188,8 +246,7 @@ HttpResult httpRequest(const String& path, const char* method, const String& bod
   return result;
 }
 
-// Versao binaria pra POST de imagem.
-HttpResult httpPostBinary(const String& path, const uint8_t* data, size_t len, const char* contentType) {
+HttpResult httpsPostBinary(const String& path, const uint8_t* data, size_t len, const char* contentType) {
   HttpResult result = {0, ""};
   WiFiClientSecure client;
   client.setInsecure();
@@ -228,31 +285,10 @@ void sendHeartbeat() {
   serializeJson(doc, body);
 
   const String path = String("/api/bins/") + BIN_CODE + "/heartbeat";
-  HttpResult r = httpRequest(path, "POST", body);
+  HttpResult r = httpsRequest(path, "POST", body);
 
   Serial.print(F("[hb] HTTP ")); Serial.print(r.code);
   Serial.print(F(" | "));        Serial.println(r.body);
-
-  if (r.code == 401) {
-    Serial.println(F("[hb] !! Chave da bin invalida."));
-  } else if (r.code < 0) {
-    Serial.print  (F("[hb] !! Erro de transporte: "));
-    Serial.println(HTTPClient::errorToString(r.code));
-  }
-}
-
-// -----------------------------------------------------------------------------
-// Drenar mensagens informativas do CAM (READY, ERROR, etc) — em IDLE.
-// -----------------------------------------------------------------------------
-void drainCamLogs() {
-  while (CamSerial.available() > 0) {
-    String line = CamSerial.readStringUntil('\n');
-    line.trim();
-    if (line.length() > 0) {
-      Serial.print(F("[cam] "));
-      Serial.println(line);
-    }
-  }
 }
 
 // -----------------------------------------------------------------------------
@@ -275,6 +311,10 @@ void resetToIdle(const __FlashStringHelper* reason) {
   Serial.println(reason);
   currentToken    = "";
   currentUserName = "";
+  // Sempre garantir que voltamos pra rede de casa antes de IDLE.
+  if (WiFi.status() != WL_CONNECTED || WiFi.SSID() != homeSSID) {
+    reconnectHome();
+  }
   setState(STATE_IDLE);
 }
 
@@ -314,7 +354,7 @@ void pollActiveSession() {
   lastPollMs = now;
 
   const String path = String("/api/bins/") + BIN_CODE + "/active-session";
-  HttpResult r = httpRequest(path, "GET", "");
+  HttpResult r = httpsRequest(path, "GET", "");
 
   if (r.code != 200) {
     Serial.print(F("[poll] HTTP ")); Serial.print(r.code);
@@ -324,11 +364,7 @@ void pollActiveSession() {
 
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, r.body);
-  if (err) {
-    Serial.print(F("[poll] JSON parse: "));
-    Serial.println(err.c_str());
-    return;
-  }
+  if (err) return;
 
   const bool active = doc["active"] | false;
   if (!active) return;
@@ -347,68 +383,113 @@ void pollActiveSession() {
 }
 
 // -----------------------------------------------------------------------------
-// Captura via UART + POST /api/sessions/{token}/classify-image
+// Pega JPEG do CAM via /capture (HTTP, rede local) — retorna ponteiro malloc'd
+// Caller deve free()
+// -----------------------------------------------------------------------------
+uint8_t* fetchJpegFromCam(size_t *outLen) {
+  *outLen = 0;
+  WiFiClient client;
+  HTTPClient http;
+  http.setTimeout(HTTP_TIMEOUT_MS);
+
+  if (!http.begin(client, CAM_CAPTURE_URL)) {
+    Serial.println(F("[cam] http.begin falhou"));
+    return nullptr;
+  }
+
+  const int code = http.GET();
+  if (code != 200) {
+    Serial.print(F("[cam] /capture HTTP ")); Serial.println(code);
+    http.end();
+    return nullptr;
+  }
+
+  const int contentLength = http.getSize();
+  if (contentLength <= 1000) {
+    Serial.print(F("[cam] tamanho suspeito: ")); Serial.println(contentLength);
+    http.end();
+    return nullptr;
+  }
+  if ((size_t)contentLength > CAM_MAX_JPEG_BYTES) {
+    Serial.print(F("[cam] tamanho muito grande: ")); Serial.println(contentLength);
+    http.end();
+    return nullptr;
+  }
+
+  uint8_t *buf = (uint8_t*) malloc(contentLength);
+  if (!buf) {
+    Serial.println(F("[cam] malloc falhou"));
+    http.end();
+    return nullptr;
+  }
+
+  WiFiClient *stream = http.getStreamPtr();
+  size_t totalRead = 0;
+  const unsigned long t0 = millis();
+  while (totalRead < (size_t)contentLength && (millis() - t0) < HTTP_TIMEOUT_MS) {
+    const int avail = stream->available();
+    if (avail > 0) {
+      const size_t toRead = (size_t)contentLength - totalRead;
+      const int n = stream->read(buf + totalRead, avail < (int)toRead ? avail : (int)toRead);
+      if (n > 0) totalRead += n;
+    } else {
+      delay(2);
+    }
+  }
+  http.end();
+
+  if (totalRead != (size_t)contentLength) {
+    Serial.print(F("[cam] download incompleto: ")); Serial.print(totalRead);
+    Serial.print(F("/")); Serial.println(contentLength);
+    free(buf);
+    return nullptr;
+  }
+
+  *outLen = totalRead;
+  return buf;
+}
+
+// -----------------------------------------------------------------------------
+// Switching Wi-Fi + captura + POST /classify-image
 // -----------------------------------------------------------------------------
 void doClassifyWithImage() {
-  Serial.println(F("[classify] solicitando foto pro ESP32-CAM..."));
+  Serial.println(F("[classify] iniciando captura..."));
 
-  // 1. Drena qualquer lixo pendente da UART antes de pedir.
-  while (CamSerial.available() > 0) CamSerial.read();
-
-  // 2. Manda CAPTURE.
-  CamSerial.println("CAPTURE");
-
-  // 3. Espera linha de header "JPEG <n>" ou "ERROR ..."
-  String header = readLineWithTimeout(CAM_HEADER_TIMEOUT_MS);
-  header.trim();
-  Serial.print(F("[classify] header: '")); Serial.print(header); Serial.println("'");
-
-  if (header.startsWith("ERROR")) {
-    resetToIdle(F("CAM reportou ERROR"));
+  // 1. Switch pra AP do CAM
+  if (!connectToCamAP()) {
+    resetToIdle(F("nao conseguiu conectar no AP do CAM"));
     return;
   }
-  if (!header.startsWith("JPEG ")) {
-    resetToIdle(F("header inesperado do CAM"));
+  delay(500);   // estabiliza DHCP
+
+  // 2. Baixa JPEG
+  size_t jpegLen = 0;
+  uint8_t *jpeg = fetchJpegFromCam(&jpegLen);
+  if (!jpeg) {
+    Serial.println(F("[classify] falha ao baixar JPEG"));
+    reconnectHome();
+    resetToIdle(F("falha na captura"));
     return;
   }
+  Serial.print(F("[classify] JPEG baixado: "));
+  Serial.print(jpegLen); Serial.println(F(" bytes"));
 
-  const size_t jpegSize = header.substring(5).toInt();
-  if (jpegSize < 1000 || jpegSize > CAM_MAX_JPEG_BYTES) {
-    Serial.print(F("[classify] jpegSize invalido: "));
-    Serial.println(jpegSize);
-    resetToIdle(F("tamanho de JPEG fora do esperado"));
+  // 3. Volta pra rede de casa
+  if (!reconnectHome()) {
+    free(jpeg);
+    resetToIdle(F("falha ao reconectar rede de casa"));
     return;
   }
-  Serial.print(F("[classify] JPEG size: ")); Serial.print(jpegSize);
-  Serial.println(F(" bytes — baixando..."));
+  delay(500);
 
-  // 4. Aloca buffer.
-  uint8_t *buffer = (uint8_t*) malloc(jpegSize);
-  if (!buffer) {
-    resetToIdle(F("malloc do JPEG falhou"));
-    return;
-  }
-
-  // 5. Le os bytes do CAM com timeout.
-  size_t received = readBytesWithTimeout(buffer, jpegSize, CAM_BODY_TIMEOUT_MS);
-  if (received != jpegSize) {
-    Serial.print(F("[classify] esperado ")); Serial.print(jpegSize);
-    Serial.print(F(", recebido "));          Serial.println(received);
-    free(buffer);
-    resetToIdle(F("download incompleto do JPEG"));
-    return;
-  }
-  Serial.println(F("[classify] JPEG recebido, postando pro backend..."));
-
-  // 6. POST pro backend.
+  // 4. POST pro backend
   const String path = String("/api/sessions/") + currentToken + "/classify-image";
-  HttpResult r = httpPostBinary(path, buffer, jpegSize, "image/jpeg");
-  free(buffer);
+  HttpResult r = httpsPostBinary(path, jpeg, jpegLen, "image/jpeg");
+  free(jpeg);
 
   Serial.print(F("[classify] HTTP ")); Serial.print(r.code);
   Serial.print(F(" | "));              Serial.println(r.body);
 
-  // 7. Avalia resposta.
   if (r.code == 200) {
     JsonDocument resp;
     if (!deserializeJson(resp, r.body)) {
@@ -443,45 +524,13 @@ void doClassifyWithImage() {
 }
 
 // -----------------------------------------------------------------------------
-// Helpers da UART
-// -----------------------------------------------------------------------------
-String readLineWithTimeout(unsigned long timeoutMs) {
-  String line;
-  const unsigned long start = millis();
-  while ((millis() - start) < timeoutMs) {
-    if (CamSerial.available()) {
-      const char c = CamSerial.read();
-      if (c == '\n') return line;
-      if (c != '\r') line += c;
-    } else {
-      delay(1);
-    }
-  }
-  return line;
-}
-
-size_t readBytesWithTimeout(uint8_t *buffer, size_t expected, unsigned long timeoutMs) {
-  size_t read = 0;
-  unsigned long lastByteMs = millis();
-  while (read < expected && (millis() - lastByteMs) < timeoutMs) {
-    if (CamSerial.available()) {
-      buffer[read++] = (uint8_t)CamSerial.read();
-      lastByteMs = millis();
-    } else {
-      delay(1);
-    }
-  }
-  return read;
-}
-
-// -----------------------------------------------------------------------------
 // Complete — POST /api/sessions/{token}/complete
 // -----------------------------------------------------------------------------
 void doComplete() {
   Serial.println(F("[complete] enviando..."));
 
   const String path = String("/api/sessions/") + currentToken + "/complete";
-  HttpResult r = httpRequest(path, "POST", "{}");
+  HttpResult r = httpsRequest(path, "POST", "{}");
 
   Serial.print(F("[complete] HTTP ")); Serial.print(r.code);
   Serial.print(F(" | "));              Serial.println(r.body);
