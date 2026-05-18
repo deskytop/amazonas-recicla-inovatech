@@ -261,7 +261,7 @@ String sendMegaCommand(const char* cmd) {
 
 void pingMega() {
   Serial.println(F("[mega] enviando PING..."));
-  const String reply = sendMegaCommand("PING");
+  String reply = sendMegaCommand("PING");
   reply.trim();
   if (reply.startsWith("PONG")) {
     megaOnline = true;
@@ -277,7 +277,7 @@ void pingMega() {
 // o fluxo se falhar.
 void megaCommand(const char* cmd) {
   if (!megaOnline) return;
-  const String reply = sendMegaCommand(cmd);
+  String reply = sendMegaCommand(cmd);
   reply.trim();
   Serial.print(F("[mega] ")); Serial.print(cmd);
   Serial.print(F(" -> ")); Serial.println(reply);
