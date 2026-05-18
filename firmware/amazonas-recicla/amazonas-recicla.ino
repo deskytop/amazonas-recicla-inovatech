@@ -1,13 +1,25 @@
 // =============================================================================
-// Amazonas Recicla — Firmware ESP32
-// Sketch 2: Maquina de estados completa com polling + classify mock + complete.
+// Amazonas Recicla — Firmware ESP32 (gateway DevKit 38-pin)
 //
-// Adiciona ao sketch 1:
-//  - Polling de /active-session a cada 1.5s
-//  - Quando detecta sessao: aguarda 5s simulando deposito, manda classify mock
-//    (plastic / 0.94), manda complete, volta a IDLE
-//  - Botao BOOT (GPIO 0) segurado por 5s reseta credenciais Wi-Fi
-//  - Watchdog: estado preso por 20s volta a IDLE
+// Sketch 3: classificacao REAL via Claude vision no backend.
+//
+// Arquitetura distribuida em 2 camadas:
+//   ESP32-CAM (firmware amazonas-recicla-cam)  ──UART──>  ESP32 DevKit (este)
+//                                                              │
+//                                                              ▼ HTTPS
+//                                                         Backend Vercel
+//                                                              │
+//                                                              ▼
+//                                                         Claude Sonnet 4.6
+//                                                         (vision)
+//
+// Quando detecta sessao ativa:
+//   1. Espera DEPOSIT_DELAY_MS pra usuario depositar o material
+//   2. Manda "CAPTURE\n" pro CAM via UART2
+//   3. Recebe header "JPEG <bytes>\n" e os bytes brutos do JPEG
+//   4. POST esses bytes pro /api/sessions/<token>/classify-image
+//   5. Backend chama Claude vision, retorna {material, pointsValue, ...}
+//   6. Manda /complete e volta a IDLE
 //
 // Hardware testado: ESP32 DevKit 38-pin com CP2102 (USB direto no laptop).
 // =============================================================================
@@ -25,10 +37,10 @@
 // Maquina de estados
 // -----------------------------------------------------------------------------
 enum FirmwareState {
-  STATE_IDLE,             // gaveta trancada, polling /active-session
-  STATE_SESSION_ACTIVE,   // sessao detectada, aguardando deposito (mock = delay)
-  STATE_CLASSIFYING,      // postando /classify
-  STATE_COMPLETING        // postando /complete
+  STATE_IDLE,             // polling /active-session
+  STATE_SESSION_ACTIVE,   // sessao detectada, aguardando deposit delay
+  STATE_CLASSIFYING,      // captura foto + POST /classify-image
+  STATE_COMPLETING        // POST /complete
 };
 
 FirmwareState currentState   = STATE_IDLE;
@@ -40,6 +52,8 @@ uint32_t      heartbeatCount  = 0;
 
 String currentToken;
 String currentUserName;
+
+HardwareSerial CamSerial(2);   // UART2 do DevKit
 
 struct HttpResult {
   int    code;
@@ -60,6 +74,12 @@ void setup() {
   Serial.println(F("======================================"));
 
   pinMode(WIFI_RESET_PIN, INPUT_PULLUP);
+
+  // UART2 pra falar com a ESP32-CAM.
+  CamSerial.begin(CAM_UART_BAUD, SERIAL_8N1, CAM_UART_RX_PIN, CAM_UART_TX_PIN);
+  Serial.print(F("[cam] UART2 aberta em "));
+  Serial.print(CAM_UART_BAUD);
+  Serial.println(F(" baud"));
 
   connectWifi();
   setState(STATE_IDLE);
@@ -84,6 +104,9 @@ void loop() {
     lastHeartbeatMs = now;
     sendHeartbeat();
   }
+
+  // Logs do CAM (debug):
+  drainCamLogs();
 
   tickStateMachine();
   delay(50);
@@ -137,7 +160,7 @@ void checkWifiResetButton() {
 HttpResult httpRequest(const String& path, const char* method, const String& body) {
   HttpResult result = {0, ""};
   WiFiClientSecure client;
-  client.setInsecure();   // MVP: pula validacao de cert.
+  client.setInsecure();
 
   HTTPClient http;
   http.setTimeout(HTTP_TIMEOUT_MS);
@@ -165,15 +188,38 @@ HttpResult httpRequest(const String& path, const char* method, const String& bod
   return result;
 }
 
+// Versao binaria pra POST de imagem.
+HttpResult httpPostBinary(const String& path, const uint8_t* data, size_t len, const char* contentType) {
+  HttpResult result = {0, ""};
+  WiFiClientSecure client;
+  client.setInsecure();
+
+  HTTPClient http;
+  http.setTimeout(HTTP_TIMEOUT_MS);
+
+  const String url = String(API_BASE_URL) + path;
+  if (!http.begin(client, url)) {
+    Serial.println(F("[http] ERRO: http.begin falhou"));
+    result.code = -1;
+    return result;
+  }
+
+  http.addHeader("X-Bin-Key", BIN_API_KEY);
+  http.addHeader("Content-Type", contentType);
+  http.addHeader("User-Agent", "AmazonasRecicla-Firmware/" FIRMWARE_VERSION);
+
+  result.code = http.POST(const_cast<uint8_t*>(data), len);
+  result.body = http.getString();
+  http.end();
+  return result;
+}
+
 // -----------------------------------------------------------------------------
 // Heartbeat — POST /api/bins/{code}/heartbeat
 // -----------------------------------------------------------------------------
 void sendHeartbeat() {
   heartbeatCount++;
-  Serial.print(F("[hb] #")); Serial.print(heartbeatCount);
-  Serial.print(F(" -> "));   Serial.print(API_BASE_URL);
-  Serial.print(F("/api/bins/")); Serial.print(BIN_CODE);
-  Serial.println(F("/heartbeat"));
+  Serial.print(F("[hb] #")); Serial.println(heartbeatCount);
 
   JsonDocument doc;
   doc["fillLevelPercent"] = 0;
@@ -188,12 +234,24 @@ void sendHeartbeat() {
   Serial.print(F(" | "));        Serial.println(r.body);
 
   if (r.code == 401) {
-    Serial.println(F("[hb] !! Chave da bin invalida. Confira BIN_API_KEY em secrets.h."));
-  } else if (r.code == 404) {
-    Serial.println(F("[hb] !! Bin nao encontrada. Confira BIN_CODE em config.h."));
+    Serial.println(F("[hb] !! Chave da bin invalida."));
   } else if (r.code < 0) {
     Serial.print  (F("[hb] !! Erro de transporte: "));
     Serial.println(HTTPClient::errorToString(r.code));
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Drenar mensagens informativas do CAM (READY, ERROR, etc) — em IDLE.
+// -----------------------------------------------------------------------------
+void drainCamLogs() {
+  while (CamSerial.available() > 0) {
+    String line = CamSerial.readStringUntil('\n');
+    line.trim();
+    if (line.length() > 0) {
+      Serial.print(F("[cam] "));
+      Serial.println(line);
+    }
   }
 }
 
@@ -223,7 +281,6 @@ void resetToIdle(const __FlashStringHelper* reason) {
 void tickStateMachine() {
   const unsigned long inState = millis() - stateEnteredMs;
 
-  // Watchdog: qualquer estado nao-IDLE preso por mais de STATE_TIMEOUT_MS volta a IDLE.
   if (currentState != STATE_IDLE && inState > STATE_TIMEOUT_MS) {
     resetToIdle(F("watchdog (estado preso)"));
     return;
@@ -234,13 +291,13 @@ void tickStateMachine() {
       pollActiveSession();
       break;
     case STATE_SESSION_ACTIVE:
-      if (inState >= MOCK_DEPOSIT_DELAY_MS) {
-        Serial.println(F("[mock] simulacao de deposito completa"));
+      if (inState >= DEPOSIT_DELAY_MS) {
+        Serial.println(F("[deposit] janela de deposito encerrada"));
         setState(STATE_CLASSIFYING);
       }
       break;
     case STATE_CLASSIFYING:
-      doClassify();
+      doClassifyWithImage();
       break;
     case STATE_COMPLETING:
       doComplete();
@@ -274,14 +331,11 @@ void pollActiveSession() {
   }
 
   const bool active = doc["active"] | false;
-  if (!active) return;   // silencioso — sem polluir log a cada 1.5s
+  if (!active) return;
 
   const char* token    = doc["token"];
   const char* userName = doc["userDisplayName"] | "";
-  if (!token) {
-    Serial.println(F("[poll] active=true mas sem token?!"));
-    return;
-  }
+  if (!token) return;
 
   currentToken    = token;
   currentUserName = userName;
@@ -293,43 +347,131 @@ void pollActiveSession() {
 }
 
 // -----------------------------------------------------------------------------
-// Classify — POST /api/sessions/{token}/classify
+// Captura via UART + POST /api/sessions/{token}/classify-image
 // -----------------------------------------------------------------------------
-void doClassify() {
-  Serial.print(F("[classify] mock -> material="));
-  Serial.print(MOCK_MATERIAL);
-  Serial.print(F(" confidence="));
-  Serial.println(MOCK_CONFIDENCE);
+void doClassifyWithImage() {
+  Serial.println(F("[classify] solicitando foto pro ESP32-CAM..."));
 
-  JsonDocument doc;
-  doc["material"]   = MOCK_MATERIAL;
-  doc["confidence"] = MOCK_CONFIDENCE;
-  String body;
-  serializeJson(doc, body);
+  // 1. Drena qualquer lixo pendente da UART antes de pedir.
+  while (CamSerial.available() > 0) CamSerial.read();
 
-  const String path = String("/api/sessions/") + currentToken + "/classify";
-  HttpResult r = httpRequest(path, "POST", body);
+  // 2. Manda CAPTURE.
+  CamSerial.println("CAPTURE");
+
+  // 3. Espera linha de header "JPEG <n>" ou "ERROR ..."
+  String header = readLineWithTimeout(CAM_HEADER_TIMEOUT_MS);
+  header.trim();
+  Serial.print(F("[classify] header: '")); Serial.print(header); Serial.println("'");
+
+  if (header.startsWith("ERROR")) {
+    resetToIdle(F("CAM reportou ERROR"));
+    return;
+  }
+  if (!header.startsWith("JPEG ")) {
+    resetToIdle(F("header inesperado do CAM"));
+    return;
+  }
+
+  const size_t jpegSize = header.substring(5).toInt();
+  if (jpegSize < 1000 || jpegSize > CAM_MAX_JPEG_BYTES) {
+    Serial.print(F("[classify] jpegSize invalido: "));
+    Serial.println(jpegSize);
+    resetToIdle(F("tamanho de JPEG fora do esperado"));
+    return;
+  }
+  Serial.print(F("[classify] JPEG size: ")); Serial.print(jpegSize);
+  Serial.println(F(" bytes — baixando..."));
+
+  // 4. Aloca buffer.
+  uint8_t *buffer = (uint8_t*) malloc(jpegSize);
+  if (!buffer) {
+    resetToIdle(F("malloc do JPEG falhou"));
+    return;
+  }
+
+  // 5. Le os bytes do CAM com timeout.
+  size_t received = readBytesWithTimeout(buffer, jpegSize, CAM_BODY_TIMEOUT_MS);
+  if (received != jpegSize) {
+    Serial.print(F("[classify] esperado ")); Serial.print(jpegSize);
+    Serial.print(F(", recebido "));          Serial.println(received);
+    free(buffer);
+    resetToIdle(F("download incompleto do JPEG"));
+    return;
+  }
+  Serial.println(F("[classify] JPEG recebido, postando pro backend..."));
+
+  // 6. POST pro backend.
+  const String path = String("/api/sessions/") + currentToken + "/classify-image";
+  HttpResult r = httpPostBinary(path, buffer, jpegSize, "image/jpeg");
+  free(buffer);
 
   Serial.print(F("[classify] HTTP ")); Serial.print(r.code);
   Serial.print(F(" | "));              Serial.println(r.body);
 
+  // 7. Avalia resposta.
   if (r.code == 200) {
     JsonDocument resp;
     if (!deserializeJson(resp, r.body)) {
-      const int   pts  = resp["pointsValue"] | 0;
-      const char* dest = resp["destinationCompartment"] | "?";
-      Serial.print(F("[classify] -> ")); Serial.print(pts);
-      Serial.print(F(" pts | destino: "));
-      Serial.println(dest);
+      const bool ok = resp["ok"] | false;
+      if (ok) {
+        const char* material = resp["material"] | "?";
+        const int   pts      = resp["pointsValue"] | 0;
+        const float conf     = resp["confidence"] | 0.0f;
+        Serial.print(F("[classify] OK -> "));
+        Serial.print(material);
+        Serial.print(F(" / "));
+        Serial.print(pts);
+        Serial.print(F(" pts (confianca "));
+        Serial.print(conf, 2);
+        Serial.println(F(")"));
+        setState(STATE_COMPLETING);
+        return;
+      } else {
+        const char* reason = resp["reason"] | "?";
+        Serial.print(F("[classify] backend recusou: "));
+        Serial.println(reason);
+        resetToIdle(F("classificacao com baixa confianca"));
+        return;
+      }
     }
-    setState(STATE_COMPLETING);
-    return;
   }
 
   if (r.code == 410)      resetToIdle(F("sessao expirada (410)"));
   else if (r.code == 409) resetToIdle(F("transicao invalida (409)"));
   else if (r.code == 401) resetToIdle(F("chave invalida (401)"));
-  else                    resetToIdle(F("erro no classify"));
+  else                    resetToIdle(F("erro generico no classify-image"));
+}
+
+// -----------------------------------------------------------------------------
+// Helpers da UART
+// -----------------------------------------------------------------------------
+String readLineWithTimeout(unsigned long timeoutMs) {
+  String line;
+  const unsigned long start = millis();
+  while ((millis() - start) < timeoutMs) {
+    if (CamSerial.available()) {
+      const char c = CamSerial.read();
+      if (c == '\n') return line;
+      if (c != '\r') line += c;
+    } else {
+      delay(1);
+    }
+  }
+  return line;
+}
+
+size_t readBytesWithTimeout(uint8_t *buffer, size_t expected, unsigned long timeoutMs) {
+  size_t read = 0;
+  unsigned long lastByteMs = millis();
+  while (read < expected && (millis() - lastByteMs) < timeoutMs) {
+    if (CamSerial.available()) {
+      buffer[read++] = (uint8_t)CamSerial.read();
+      lastByteMs = millis();
+    } else {
+      delay(1);
+    }
+  }
+  return read;
 }
 
 // -----------------------------------------------------------------------------

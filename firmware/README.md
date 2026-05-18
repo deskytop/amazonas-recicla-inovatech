@@ -1,45 +1,81 @@
 # Firmware ESP32 — Amazonas Recicla
 
-Firmware Arduino para a lixeira inteligente. Fala HTTP REST com a API em
-produção (`https://amazonas-recicla.vercel.app`).
+Firmware Arduino para a lixeira inteligente. Arquitetura distribuída em
+**2 camadas**:
 
-## Hardware-alvo
+```
+ESP32-CAM (firmware amazonas-recicla-cam)  ──UART2 460800─►  ESP32 DevKit (gateway)
+                                                                    │
+                                                                    │ HTTPS
+                                                                    ▼
+                                                            Backend Vercel
+                                                                    │
+                                                                    ▼
+                                                            Claude Sonnet 4.6
+                                                              (vision)
+```
 
-Dois caminhos suportados — o código é idêntico, muda só o método de upload:
-
-| Placa | Quando usar | Upload |
-|---|---|---|
-| **ESP32 DevKit 38-pin (CP2102)** | Bootstrap, debug, todos os sketches sem câmera | USB direto |
-| **ESP32-CAM AI-Thinker** | Quando precisar da câmera OV2640 | Programador FTDI |
-
-Comece pelo DevKit 38-pin. Toda a comunicação HTTP é validada nele antes de
-migrar pra ESP32-CAM.
+A separação resolve o brownout do regulador LDO interno do ESP32-CAM (pico
+de ~500mA quando o Wi-Fi liga). O CAM fica só com a câmera, o DevKit cuida
+do Wi-Fi e HTTPS.
 
 ## Estrutura
 
 ```
 firmware/
-└── amazonas-recicla/
-    ├── amazonas-recicla.ino   # sketch principal
-    ├── config.h               # constantes (URL, código da bin, intervalos)
-    ├── secrets.h.example      # template (commit)
-    └── secrets.h              # chaves reais (gitignored)
+├── amazonas-recicla/             # Gateway (ESP32 DevKit 38-pin)
+│   ├── amazonas-recicla.ino      # sketch principal: polling + UART + HTTP
+│   ├── config.h                  # URLs, intervalos, pinos UART2
+│   ├── secrets.h.example         # template
+│   └── secrets.h                 # gitignored
+└── amazonas-recicla-cam/         # Captura (ESP32-CAM AI-Thinker)
+    ├── amazonas-recicla-cam.ino  # captura JPEG sob demanda via UART
+    └── config.h                  # pinos da câmera + UART1
 ```
+
+## Cabeamento operacional (CAM ↔ DevKit, 4 fios)
+
+Esta é a fiação que fica permanente. Usar jumpers macho-fêmea (CAM tem
+header macho, DevKit tem header macho — então MM funciona direto entre
+os dois, sem protoboard).
+
+| # | DevKit (gateway) | ESP32-CAM | Função |
+|:-:|---|---|---|
+| 1 | `5V` (ou `VIN`) | `5V` | alimentação |
+| 2 | `GND` | `GND` | terra comum |
+| 3 | `GPIO 17` (UART2 TX) | `GPIO 13` (UART1 RX / U2T silkscreen pode confundir, é IO13) | DevKit → CAM (comandos) |
+| 4 | `GPIO 16` (UART2 RX) | `GPIO 14` (UART1 TX) | CAM → DevKit (JPEG) |
+
+> Atenção: os pinos `U0R` e `U0T` do ESP32-CAM são UART0 (a serial de debug).
+> A comunicação com o DevKit usa **UART1 em pinos GPIO 13 e GPIO 14** —
+> que ficam noutro lado da plaquinha, junto com IO12, IO15, IO2, IO4.
+
+## Cabeamento de FLASH do ESP32-CAM (CAM ↔ Arduino Mega, temporário)
+
+Toda vez que precisar fazer upload de firmware novo no CAM, refaz essa
+fiação (depois desfaz e volta pra operacional acima):
+
+| Mega | ESP32-CAM | Função |
+|---|---|---|
+| `5V` (POWER) | `5V` | alimentação |
+| `GND` (POWER) | `GND` | terra |
+| `RX0` (pin 0) | `U0R` | bytes do PC → CAM |
+| `TX0` (pin 1) | `U0T` | bytes do CAM → PC |
+| `RESET` (POWER) | `GND` (do próprio Mega) | desabilita ATmega2560 |
+| - | `IO0` ↔ `GND` (do próprio CAM) | só DURANTE o flash |
+
+Ritual: GPIO 0 → GND, segura RST do CAM, clica Upload, espera "Connecting",
+solta RST. Depois do upload, **remove GPIO 0 → GND** e reseta o CAM.
 
 ## Setup do ambiente (uma única vez)
 
-### 1. Arduino IDE 2.x
+### 1. Arduino IDE 2.x + drivers
 
-Baixar em https://www.arduino.cc/en/software e instalar.
+Baixar em https://www.arduino.cc/en/software. No Windows, instalar drivers:
+- **CP2102** (DevKit): https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers
+- **ATmega16U2** (Mega): normalmente nativo do Windows.
 
-### 2. Driver USB-Serial (Windows)
-
-Para o ESP32 DevKit com chip **CP2102**, instalar o driver da Silicon Labs:
-https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers
-
-Plugar a placa: deve aparecer como `COMx` no Gerenciador de Dispositivos.
-
-### 3. Suporte a ESP32 no Arduino IDE
+### 2. Board manager
 
 `File → Preferences → Additional boards manager URLs`:
 
@@ -47,98 +83,104 @@ Plugar a placa: deve aparecer como `COMx` no Gerenciador de Dispositivos.
 https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 ```
 
-Depois `Tools → Board → Boards Manager`, buscar **esp32** (by Espressif Systems)
-e instalar.
+Depois `Tools → Board → Boards Manager`, instalar **esp32 by Espressif Systems**.
 
-### 4. Bibliotecas
+### 3. Bibliotecas
 
 `Tools → Manage Libraries`, instalar:
-
 - **WiFiManager** (by tzapu)
-- **ArduinoJson** (by Benoit Blanchon) — versão 7.x
+- **ArduinoJson** (by Benoit Blanchon, v7.x)
 
-### 5. Criar `secrets.h` local
-
-Copiar o template e preencher com a chave real:
+### 4. Criar `secrets.h` do gateway
 
 ```bash
 cp firmware/amazonas-recicla/secrets.h.example firmware/amazonas-recicla/secrets.h
 ```
 
-Editar `secrets.h` e substituir `bink_SUBSTITUA_PELA_CHAVE_REAL` pela chave da
-bin (vem do gerenciador de senhas).
+Editar `secrets.h` e colocar a `BIN_API_KEY` real (vem do gerenciador de senhas).
 
-## Compilar e fazer upload (ESP32 DevKit 38-pin)
+> Nota: a CAM **não precisa de secrets.h** — ela não fala com o backend.
 
-1. Abrir `firmware/amazonas-recicla/amazonas-recicla.ino` no Arduino IDE.
+## Compilar e fazer upload
+
+### Gateway (ESP32 DevKit 38-pin)
+
+1. Abrir `firmware/amazonas-recicla/amazonas-recicla.ino` no IDE.
 2. `Tools → Board → ESP32 Arduino → ESP32 Dev Module`.
-3. `Tools → Port`, escolher o `COMx` da placa.
-4. Botão **Upload** (seta pra direita no topo da IDE).
-5. Abrir `Tools → Serial Monitor`, configurar baud `115200`.
+3. `Tools → Port → COM do DevKit` (geralmente COM7, depende do PC).
+4. Upload (seta verde →).
+5. Serial Monitor → 115200 baud.
 
-### Primeira execução (sem credenciais salvas)
+### ESP32-CAM (com Mega como programador)
 
-O ESP32 vai criar um Wi-Fi próprio:
+1. Refaz cabeamento de flash (tabela acima, com Mega).
+2. GPIO 0 → GND (jumper de modo download).
+3. Abrir `firmware/amazonas-recicla-cam/amazonas-recicla-cam.ino`.
+4. `Tools → Board → ESP32 Arduino → AI Thinker ESP32-CAM`.
+5. `Tools → Partition Scheme → Huge APP (3MB No OTA/1MB SPIFFS)`.
+6. `Tools → Port → COM do Mega` (geralmente COM8).
+7. Upload. Ritual: segura RST do CAM, clica Upload, espera `Connecting......`,
+   solta RST. Pode precisar repetir o RST 2-3 vezes.
+8. Quando aparecer `Hard resetting...`, o upload terminou.
+9. **REMOVE o jumper GPIO 0 → GND** (senão fica em modo download pra sempre).
+10. Desconecta o Mega e refaz cabeamento OPERACIONAL com o DevKit.
+11. Reseta o CAM.
 
-- **SSID:** `AmazonasRecicla-Setup`
-- **Senha:** `recicla123`
+## Primeira execução
 
-Conectar pelo celular nessa rede → uma página abre automaticamente (captive
-portal) → escolher a rede de verdade → digitar senha → salvar. O ESP32
-reconecta e a partir daí lembra dessa rede em todo boot.
+### Wi-Fi (apenas no DevKit/gateway)
 
-### Trocar de rede (ex: casa → feira)
+Sem credenciais salvas, o DevKit cria `AmazonasRecicla-Setup` (senha
+`recicla123`). Conecta o celular nessa rede, um captive portal abre, escolhe
+a rede de verdade e digita a senha. O DevKit salva em flash e reconecta
+nos boots seguintes.
 
-A partir do sketch 2, **segura o botão BOOT do ESP32 por 5 segundos**
-(a placa fica nos pinos próximos ao chip — o outro é EN/RST). O log no Serial
-Monitor confirma:
+Pra trocar de rede (casa → feira), **segura o botão `BOOT` do DevKit por
+5 segundos**: ele zera as credenciais salvas e levanta de novo o AP de setup.
+
+### Fluxo end-to-end
 
 ```
-[btn] BOOT pressionado — segure 5s pra resetar Wi-Fi
-[btn] !! RESETANDO CREDENCIAIS WI-FI E REINICIANDO
+Usuario abre /app/bin/BIN-MNS-001/iniciar no celular → clica "Iniciar sessao"
+       ▼
+DevKit detecta via polling (1.5s)              [state] -> SESSION_ACTIVE
+       ▼
+DevKit espera 3s (deposit window)              [deposit] janela encerrada
+       ▼
+DevKit manda "CAPTURE" via UART2               [classify] solicitando foto...
+       ▼
+CAM responde "JPEG <N>\n" + N bytes JPEG       [cam] JPEG 24576
+       ▼
+DevKit POST /classify-image (JPEG binario)     [classify] postando pro backend...
+       ▼
+Backend chama Claude vision                    [classify] HTTP 200
+       ▼
+Backend retorna {material, pointsValue}        [classify] OK -> plastic / 75 pts
+       ▼
+DevKit POST /complete                          [complete] !!! 75 pts CREDITADOS
+       ▼
+Celular atualiza via Realtime: "Obrigado por reciclar!"
 ```
 
-O ESP32 reinicia e levanta de novo o AP `AmazonasRecicla-Setup` pra você
-configurar a nova rede pelo celular. Sem recompilar nada.
-
-> Alternativa por código: dentro de `connectWifi()`, adicionar `wm.resetSettings();`
-> antes do `wm.autoConnect`, fazer upload, remover, fazer upload de novo.
-
-## O que esperar no Serial Monitor
-
-```
-======================================
-  Amazonas Recicla — Firmware ESP32
-  Versao: 0.1.0
-  Bin:    BIN-MNS-001
-======================================
-[wifi] Tentando conectar com credenciais salvas...
-[wifi] Conectado! SSID: minha-rede
-[wifi] IP local:        192.168.1.42
-[wifi] RSSI:            -54 dBm
-[hb] #1 -> https://amazonas-recicla.vercel.app/api/bins/BIN-MNS-001/heartbeat
-[hb] HTTP 200 | {"ok":true}
-```
-
-Daí em diante, a cada 30s: novo heartbeat com `HTTP 200`.
-
-## Roadmap dos sketches
+## Roadmap
 
 | # | Funcionalidade | Status |
 |---|---|---|
-| 1 | Wi-Fi + heartbeat | ✅ |
-| 2 | Polling + classify mock + complete + watchdog + reset Wi-Fi via BOOT | ✅ |
-| 3 | Câmera OV2640 + captura | a fazer |
-| 4 | Classificação simples (cor dominante) | a fazer |
-| 5 | Servo da gaveta + HC-SR04 | a fazer |
-| 6 | Motor de passo direcionando compartimentos | V2 |
+| 1 | Wi-Fi + heartbeat (DevKit) | ✅ |
+| 2 | Polling + classify mock + complete (DevKit) | ✅ |
+| 3 | Classificação real via Claude vision (CAM + DevKit + backend) | ✅ |
+| 4 | Servo SG90 da trava da gaveta | a fazer |
+| 5 | Sensor IR confirmando deposição | a fazer |
+| 6 | HC-SR04 medindo fill level real | a fazer |
+| 7 | Motor NEMA17 + A4988 direcionando compartimentos | V2 |
 
 ## Troubleshooting
 
 | Sintoma | Provável causa | Solução |
 |---|---|---|
-| Porta `COMx` não aparece | Driver CP2102 não instalado | Item 2 do setup |
-| Upload falha com `timed out waiting for packet header` | Boot mode | Segurar `BOOT`, tocar `EN`, soltar `EN`, soltar `BOOT` |
-| `[hb] HTTP 401` | Chave inválida | Reverificar `BIN_API_KEY` em `secrets.h` |
-| `[hb] HTTP 404` | Bin não cadastrada | Reverificar `BIN_CODE` em `config.h` |
-| `[hb] Erro de transporte: -1` | Sem rota / DNS | Confirmar que o Wi-Fi tem internet |
+| Upload do CAM `No serial data received` | GPIO 0 não em GND ou ritual de RST errado | Confere jumper IO0→GND, segura RST do CAM antes de clicar Upload |
+| LED vermelho do CAM fraco | Subtensão | Alimenta CAM direto pelo 5V do DevKit (não via protoboard com trilhos longos) |
+| `[classify] header inesperado do CAM` | UART mal cabeada ou CAM resetando | Confere fios GPIO 13/14 do CAM ↔ GPIO 16/17 do DevKit, GND comum |
+| `[classify] backend recusou: unrecognized_or_low_confidence` | Claude não reconheceu o material | Iluminação ruim, objeto fora de foco, ou material atípico — refazer captura |
+| `[classify] HTTP 500 anthropic_key_missing` | Variável de ambiente não setada | Adicionar `ANTHROPIC_API_KEY` no Vercel (Settings → Environment Variables) |
+| `[hb] HTTP 401` | Bin key inválida | Reverificar `BIN_API_KEY` em `secrets.h` |
