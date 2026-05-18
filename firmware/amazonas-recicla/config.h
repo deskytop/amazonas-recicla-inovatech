@@ -38,7 +38,7 @@
 // Default da SDK ESP32 pra UART2: RX=16, TX=17. Baud baixo (9600) pra
 // sobreviver ao divisor de tensao 5V->3.3V no caminho Mega->ESP32 RX.
 #define MEGA_UART_BAUD         9600UL
-#define MEGA_UART_RX_PIN       16
+#define MEGA_UART_RX_PIN       4         // mais robusto que GPIO 16 (sem conflito PSRAM)
 #define MEGA_UART_TX_PIN       17
 #define MEGA_RESPONSE_TIMEOUT_MS 3000UL
 
