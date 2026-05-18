@@ -3,6 +3,7 @@ import { db } from "@/lib/db/client";
 import { profiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import Link from "next/link";
+import { HeaderPointsBadge } from "./header-points-badge";
 
 export async function AppHeader() {
   const supabase = await createClient();
@@ -30,17 +31,10 @@ export async function AppHeader() {
           <span className="text-amber-accent text-base leading-none">.</span>
         </Link>
         {profile && (
-          <Link
-            href="/app/perfil"
-            className="inline-flex items-baseline gap-1.5 px-3 py-1.5 border border-primary/30 hover:border-primary hover:bg-primary/5 transition-colors"
-          >
-            <span className="font-stat text-base font-bold text-primary tabular-nums leading-none">
-              {profile.totalPoints}
-            </span>
-            <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground leading-none">
-              pts
-            </span>
-          </Link>
+          <HeaderPointsBadge
+            userId={user.id}
+            initialTotalPoints={profile.totalPoints}
+          />
         )}
       </div>
     </header>

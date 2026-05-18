@@ -66,6 +66,7 @@ export default async function HistoricoPage() {
               row.material && row.pointsValue && row.completedAt ? (
                 <li key={row.id}>
                   <DiscardHistoryCard
+                    sessionId={row.id}
                     material={row.material as Material}
                     pointsValue={row.pointsValue}
                     completedAt={row.completedAt}

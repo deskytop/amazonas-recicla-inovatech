@@ -22,18 +22,26 @@ const MIN_CONFIDENCE = 0.5;
 
 const PROMPT = `Voce e um classificador de materiais reciclaveis para uma lixeira inteligente em Manaus.
 
-Olhe a imagem e classifique o material visivel como EXATAMENTE UM destes:
+Olhe a imagem e classifique o material FISICO visivel como EXATAMENTE UM destes:
 - plastic (plastico: garrafas PET, embalagens, sacos, copos)
 - metal (latas de aluminio, ferro, tampinhas metalicas)
 - glass (vidro: garrafas, potes)
 - paper (papel, papelao, jornal, revista)
 
-Responda APENAS com um JSON valido neste formato exato, sem markdown, sem explicacao:
+REGRA ANTI-FRAUDE (criticisima):
+Se a imagem mostrar:
+- Uma TELA de celular, tablet, monitor, TV (mesmo exibindo um material) — sinais: reflexos, pixels visiveis, bordas escuras do display, brilho artificial uniforme, moire pattern
+- Uma FOTOGRAFIA IMPRESSA em papel mostrando um material — sinais: bordas marcadas, falta de profundidade 3D, textura de impressao, sombras planas
+- Qualquer REPRESENTACAO DIGITAL ou IMPRESSA de um material (nao o material real)
+NAO classifique. Retorne {"material": null, "confidence": 0.0, "fraudSuspected": true}.
+
+Apenas materiais FISICOS reais, em 3D, com sombras naturais consistentes, sao validos.
+
+Responda APENAS com JSON valido, sem markdown, sem explicacao:
 {"material": "plastic", "confidence": 0.94}
 
-A confianca deve estar entre 0 e 1.
-Se a imagem estiver vazia, escura demais, irreconhecivel, ou mostrar algo que nao e nenhum desses 4 materiais, responda:
-{"material": null, "confidence": 0.0}
+Se for fraude: {"material": null, "confidence": 0.0, "fraudSuspected": true}
+Se for vazio/irreconhecivel/outro material: {"material": null, "confidence": 0.0}
 
 Apenas o JSON.`;
 
