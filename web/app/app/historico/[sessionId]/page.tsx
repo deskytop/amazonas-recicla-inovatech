@@ -104,20 +104,17 @@ export default async function DescarteDetalhePage({ params }: Params) {
         <div className="flex items-center gap-2">
           <Sparkles className="h-4 w-4 text-accent-foreground" />
           <h2 className="font-mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            Imagem analisada pela IA
+            Imagem do descarte
           </h2>
         </div>
         {row.imageUrl ? (
-          <figure className="rounded-md overflow-hidden border border-border">
+          <div className="rounded-md overflow-hidden border border-border">
             <img
               src={row.imageUrl}
               alt={`Material descartado: ${MATERIAL_LABELS[material]}`}
               className="w-full h-auto"
             />
-            <figcaption className="bg-muted/40 px-3 py-2 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              Captura via ESP32-CAM • classificação por Claude Sonnet 4.6 vision
-            </figcaption>
-          </figure>
+          </div>
         ) : (
           <Card className="p-6 flex flex-col items-center gap-2 bg-muted/40 border-dashed">
             <ImageOff className="h-6 w-6 text-muted-foreground" />
