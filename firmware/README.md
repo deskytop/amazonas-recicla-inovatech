@@ -23,15 +23,114 @@ do Wi-Fi e HTTPS.
 
 ```
 firmware/
-├── amazonas-recicla/             # Gateway (ESP32 DevKit 38-pin)
-│   ├── amazonas-recicla.ino      # sketch principal: polling + UART + HTTP
-│   ├── config.h                  # URLs, intervalos, pinos UART2
-│   ├── secrets.h.example         # template
-│   └── secrets.h                 # gitignored
-└── amazonas-recicla-cam/         # Captura (ESP32-CAM AI-Thinker)
-    ├── amazonas-recicla-cam.ino  # captura JPEG sob demanda via UART
-    └── config.h                  # pinos da câmera + UART1
+├── amazonas-recicla/              # Gateway (ESP32 DevKit 38-pin)
+│   ├── amazonas-recicla.ino       # polling HTTP + Wi-Fi switching + UART pro Mega
+│   ├── config.h                   # URLs, intervalos, pinos UART2
+│   ├── secrets.h.example          # template
+│   └── secrets.h                  # gitignored
+├── amazonas-recicla-cam/          # ESP32-CAM AI-Thinker (NÃO USADO — fica
+│   ├── amazonas-recicla-cam.ino   # como referência se um dia conseguirmos
+│   └── config.h                   # flashar. Atualmente usamos o CameraWebServer
+│                                  # que já está flashado, via Wi-Fi switching)
+└── amazonas-recicla-mega/         # Arquivos Arduino Mega (controlador físico)
+    ├── amazonas-recicla-mega.ino  # motor NEMA17 + servo + sensores
+    └── config.h                   # pinout do hardware
 ```
+
+## Cabeamento Fase 1.1 — DevKit ↔ Mega via UART (apenas 3 pontos)
+
+Comunicação serial bidirecional. Mega trabalha em 5V, ESP32 em 3.3V — então o
+sentido **Mega → ESP32 precisa de divisor de tensão** (proteger o GPIO do ESP32).
+
+```
+ESP32 DevKit                                       Arduino Mega
+══════════════                                     ═══════════════
+GND ─────────────────────────────────────────────  GND (POWER)
+
+GPIO 17 ─────────────────────────────────────────  pin 19 (Serial1 RX)
+(UART2 TX, 3.3V)         direto, 3.3V serve
+
+GPIO 16 ◄──┬── R 2K2 ────────────────────────────  pin 18 (Serial1 TX)
+(UART2 RX) │       (5V → 3.3V via divisor)
+           │
+           └── R 4K7 ── GND
+```
+
+**3 fios + 2 resistores** (2K2 e 4K7 do kit).
+
+### Montagem do divisor de tensão na protoboard
+
+1. Plug R **2K2** com uma ponta numa linha qualquer (chamemos **L1**) e outra
+   ponta numa linha diferente (**L2**).
+2. Plug R **4K7** com uma ponta em **L2** e outra ponta no trilho `−` (GND).
+3. **L1** recebe o fio do pin 18 (TX) do Mega.
+4. **L2** alimenta o GPIO 16 do DevKit (RX).
+5. O GND comum entre Mega, DevKit e o trilho `−` precisa estar conectado.
+
+Cálculo do divisor: 5V × 4.7 / (2.2 + 4.7) ≈ 3.4V — dentro da faixa lógica HIGH
+do ESP32 e seguro contra clamp diodes.
+
+### Sentido inverso (ESP32 → Mega)
+
+Vai direto sem divisor. O Mega aceita 3.3V como HIGH (limiar ~2.5V).
+
+## Protocolo entre DevKit e Mega
+
+DevKit envia comandos pelo UART2, Mega responde:
+
+| Comando do DevKit | Resposta do Mega | Quando |
+|---|---|---|
+| `PING` | `PONG <versao>` | No boot do DevKit |
+| `STATUS` | `STATUS pos=<n> drawer=<open\|closed> ir=<0\|1> fill=<%>` | Debug manual |
+| `HOME` | `OK home` | Início de operação |
+| `GOTO <plastic\|metal\|glass\|paper\|home>` | `OK goto <material>` | Após Claude classificar |
+| `OPEN_DRAWER` | `OK drawer_open` | Quando detecta sessão ativa |
+| `CLOSE_DRAWER` | `OK drawer_closed` | Após complete |
+| `GET_FILL` | `FILL <percent>` | A cada heartbeat (futuro) |
+| `GET_IR` | `IR <0\|1>` | Debug |
+
+**Modo gracioso:** se o Mega não responder ao PING inicial, o DevKit segue
+funcionando sem ele. Útil pra testar fluxo digital antes de cabear hardware.
+
+## Cabeamento Fase 1.2 — Motor NEMA17 via A4988 (a fazer)
+
+```
+Fonte 12V/3A (plug P4)                    Arduino Mega
+═════════════════════                     ═════════════
+12V ─────────────────────── A4988 VMOT
+GND ───────────────┬─────── A4988 GND (lado VMOT)
+                   │
+                   └─────── GND (POWER do Mega)        (terra comum!)
+
+5V (do USB Mega) ─────────── A4988 VDD
+GND          ─────────────── A4988 GND (lado VDD)
+
+pin 5 (STEP)  ────────────── A4988 STEP
+pin 4 (DIR)   ────────────── A4988 DIR
+pin 6 (~ENABLE) ──────────── A4988 ENABLE
+                  (LOW = ativo)
+
+A4988 RESET ──┐
+              │── curto entre os 2 pinos
+A4988 SLEEP ──┘
+
+A4988 saída → Motor NEMA17 KS422STH34-1504A (4 fios):
+    1A, 1B → bobina A (par)
+    2A, 2B → bobina B (par)
+```
+
+**SEM CAPACITOR** entre VMOT e GND — risco assumido. Mitigações:
+- Ajustar potenciômetro do A4988 pra **corrente baixa** (girar parafuso anti-horário, fios bem curtos)
+- Não inverter direção bruscamente
+- Movimentos suaves (rampa de aceleração já configurada via AccelStepper)
+
+### Identificar pares de bobinas do motor (sem multímetro)
+
+1. Cabos típicos do NEMA17: vermelho, azul, verde, preto.
+2. Tente: 1A=vermelho, 1B=azul, 2A=verde, 2B=preto.
+3. Se motor vibrar sem girar = par errado. Inverta 1A↔1B (mantém 2A/2B).
+4. Se ainda errado, inverta 2A↔2B.
+5. 4 combinações no máximo — alguma vai funcionar.
 
 ## Cabeamento operacional (CAM ↔ DevKit, 4 fios)
 

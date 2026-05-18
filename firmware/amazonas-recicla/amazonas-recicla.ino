@@ -61,6 +61,12 @@ String homePSK;
 String lastFailedToken;
 unsigned long lastFailedAtMs = 0;
 
+// Comunicacao com o Arduino Mega (controlador fisico de motor, servo e
+// sensores). Se nao responder ao PING inicial, seguimos sem ele (modo
+// gracioso — fluxo digital continua funcionando).
+HardwareSerial MegaSerial(2);
+bool megaOnline = false;
+
 struct HttpResult {
   int    code;
   String body;
@@ -80,6 +86,15 @@ void setup() {
   Serial.println(F("======================================"));
 
   pinMode(WIFI_RESET_PIN, INPUT_PULLUP);
+
+  // UART2 pra falar com o Mega.
+  MegaSerial.begin(MEGA_UART_BAUD, SERIAL_8N1, MEGA_UART_RX_PIN, MEGA_UART_TX_PIN);
+  Serial.print(F("[mega] UART2 aberta @ "));
+  Serial.print(MEGA_UART_BAUD); Serial.println(F(" baud"));
+
+  // PING inicial — testa se o Mega esta cabeado.
+  delay(200);
+  pingMega();
 
   WiFi.mode(WIFI_STA);
   connectWifi();
@@ -215,6 +230,57 @@ void checkWifiResetButton() {
     Serial.println(F("[btn] BOOT solto antes dos 5s — cancelado"));
     buttonPressedMs = 0;
   }
+}
+
+// -----------------------------------------------------------------------------
+// Comunicacao com Arduino Mega (UART2, 9600 baud)
+// -----------------------------------------------------------------------------
+// Drena qualquer lixo pendente da UART (antes de enviar comando).
+void drainMegaSerial() {
+  while (MegaSerial.available()) MegaSerial.read();
+}
+
+// Envia comando + le linha de resposta com timeout. Retorna "" se nada veio.
+String sendMegaCommand(const char* cmd) {
+  drainMegaSerial();
+  MegaSerial.println(cmd);
+
+  String line;
+  const unsigned long start = millis();
+  while ((millis() - start) < MEGA_RESPONSE_TIMEOUT_MS) {
+    if (MegaSerial.available()) {
+      const char c = MegaSerial.read();
+      if (c == '\n') return line;
+      if (c != '\r') line += c;
+    } else {
+      delay(2);
+    }
+  }
+  return line;
+}
+
+void pingMega() {
+  Serial.println(F("[mega] enviando PING..."));
+  const String reply = sendMegaCommand("PING");
+  reply.trim();
+  if (reply.startsWith("PONG")) {
+    megaOnline = true;
+    Serial.print(F("[mega] online: "));
+    Serial.println(reply);
+  } else {
+    megaOnline = false;
+    Serial.println(F("[mega] sem resposta — modo gracioso (so fluxo digital)"));
+  }
+}
+
+// Tenta enviar comando "fire-and-forget". Loga resposta mas nao bloqueia
+// o fluxo se falhar.
+void megaCommand(const char* cmd) {
+  if (!megaOnline) return;
+  const String reply = sendMegaCommand(cmd);
+  reply.trim();
+  Serial.print(F("[mega] ")); Serial.print(cmd);
+  Serial.print(F(" -> ")); Serial.println(reply);
 }
 
 // -----------------------------------------------------------------------------
@@ -403,6 +469,8 @@ void pollActiveSession() {
   Serial.println(F("[poll] >>> SESSAO ATIVA DETECTADA <<<"));
   Serial.print  (F("[poll]     token:   ")); Serial.println(currentToken);
   Serial.print  (F("[poll]     usuario: ")); Serial.println(currentUserName);
+  // Sessao ativa: pede pro Mega destravar a gaveta.
+  megaCommand("OPEN_DRAWER");
   setState(STATE_SESSION_ACTIVE);
 }
 
@@ -542,6 +610,12 @@ void doClassifyWithImage() {
         Serial.print(F(" pts (confianca "));
         Serial.print(conf, 2);
         Serial.println(F(")"));
+        // Pede pro Mega rotacionar a gaveta pra posicao do material.
+        if (megaOnline) {
+          char gotoCmd[32];
+          snprintf(gotoCmd, sizeof(gotoCmd), "GOTO %s", material);
+          megaCommand(gotoCmd);
+        }
         setState(STATE_COMPLETING);
         return;
       } else {
@@ -581,5 +655,8 @@ void doComplete() {
       Serial.println(F(" pts CREDITADOS no usuario"));
     }
   }
+  // Fim do ciclo: gaveta volta a HOME e trava.
+  megaCommand("GOTO home");
+  megaCommand("CLOSE_DRAWER");
   resetToIdle(F("ciclo concluido"));
 }

@@ -5,7 +5,7 @@
 // Tudo aqui e publico — qualquer dado sensivel vai em secrets.h (gitignored).
 // =============================================================================
 
-#define FIRMWARE_VERSION       "0.4.1"
+#define FIRMWARE_VERSION       "0.5.0"
 
 #define API_BASE_URL           "https://amazonas-recicla.vercel.app"
 #define BIN_CODE               "BIN-MNS-001"
@@ -31,6 +31,20 @@
 #define CAM_MAX_JPEG_BYTES     262144UL         // 256KB hard limit
 #define CAM_CAPTURE_RETRIES    2                // tentativas extras se /capture falhar
 #define FAIL_COOLDOWN_MS       60000UL          // ignora token que falhou por 60s
+
+// =============================================================================
+// UART pro Arduino Mega (controlador fisico — motor, servo, sensores)
+// =============================================================================
+// Default da SDK ESP32 pra UART2: RX=16, TX=17. Baud baixo (9600) pra
+// sobreviver ao divisor de tensao 5V->3.3V no caminho Mega->ESP32 RX.
+#define MEGA_UART_BAUD         9600UL
+#define MEGA_UART_RX_PIN       16
+#define MEGA_UART_TX_PIN       17
+#define MEGA_RESPONSE_TIMEOUT_MS 3000UL
+
+// Quando o Mega responder ao PING inicial, marcamos como online. Se nao
+// responder, o DevKit continua funcionando sem ele (modo gracioso).
+// Permite testar fluxo digital antes de cabear o Mega.
 
 // Botao BOOT (GPIO 0) — segurar por WIFI_RESET_HOLD_MS reseta credenciais Wi-Fi.
 #define WIFI_RESET_PIN         0
