@@ -5,7 +5,7 @@
 // Tudo aqui e publico — qualquer dado sensivel vai em secrets.h (gitignored).
 // =============================================================================
 
-#define FIRMWARE_VERSION       "0.4.0"
+#define FIRMWARE_VERSION       "0.4.1"
 
 #define API_BASE_URL           "https://amazonas-recicla.vercel.app"
 #define BIN_CODE               "BIN-MNS-001"
@@ -29,6 +29,8 @@
 #define CAM_CONNECT_TIMEOUT_MS 10000UL          // tempo pra conectar no AP do CAM
 #define HOME_RECONNECT_TIMEOUT_MS 15000UL       // tempo pra voltar pra casa
 #define CAM_MAX_JPEG_BYTES     262144UL         // 256KB hard limit
+#define CAM_CAPTURE_RETRIES    2                // tentativas extras se /capture falhar
+#define FAIL_COOLDOWN_MS       60000UL          // ignora token que falhou por 60s
 
 // Botao BOOT (GPIO 0) — segurar por WIFI_RESET_HOLD_MS reseta credenciais Wi-Fi.
 #define WIFI_RESET_PIN         0

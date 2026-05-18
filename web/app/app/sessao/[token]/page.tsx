@@ -36,6 +36,7 @@ export default async function SessaoPage({ params }: Params) {
         material: session.material,
         pointsValue: session.pointsValue,
         expiresAt: session.expiresAt.toISOString(),
+        imageUrl: session.imageUrl,
       }}
     />
   );

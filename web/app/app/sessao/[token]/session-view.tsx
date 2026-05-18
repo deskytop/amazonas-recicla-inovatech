@@ -15,6 +15,7 @@ interface SessionState {
   material: Material | null;
   pointsValue: number | null;
   expiresAt: string;
+  imageUrl: string | null;
 }
 
 export function SessionView({ initialSession }: { initialSession: SessionState }) {
@@ -52,6 +53,7 @@ export function SessionView({ initialSession }: { initialSession: SessionState }
               material: Material | null;
               points_value: number | null;
               expires_at: string;
+              image_url: string | null;
             };
             setSession((prev) => ({
               ...prev,
@@ -59,6 +61,7 @@ export function SessionView({ initialSession }: { initialSession: SessionState }
               material: row.material,
               pointsValue: row.points_value,
               expiresAt: row.expires_at,
+              imageUrl: row.image_url ?? prev.imageUrl,
             }));
           },
         )
@@ -95,6 +98,18 @@ export function SessionView({ initialSession }: { initialSession: SessionState }
           +{session.pointsValue} pts
         </p>
         <p className="text-muted-foreground">Pontos creditados ao seu saldo.</p>
+        {session.imageUrl && (
+          <figure className="mt-4 max-w-xs">
+            <img
+              src={session.imageUrl}
+              alt="Material capturado pela câmera"
+              className="rounded-md border border-border w-full"
+            />
+            <figcaption className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mt-2">
+              Captura analisada pela IA
+            </figcaption>
+          </figure>
+        )}
         <BackButton href="/app" label="Voltar para o início" className="mt-4" />
       </div>
     );
@@ -135,6 +150,13 @@ export function SessionView({ initialSession }: { initialSession: SessionState }
         <p className="font-display text-4xl font-bold text-primary">
           +{session.pointsValue} pts
         </p>
+        {session.imageUrl && (
+          <img
+            src={session.imageUrl}
+            alt="Material capturado pela câmera"
+            className="rounded-md border border-border max-w-xs w-full"
+          />
+        )}
         <p className="text-muted-foreground">Aguardando a lixeira finalizar...</p>
       </div>
     );

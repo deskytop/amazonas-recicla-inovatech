@@ -77,6 +77,7 @@ export const sessions = pgTable(
     material: material("material"),
     pointsValue: integer("points_value"),
     status: sessionStatus("status").notNull().default("awaiting_material"),
+    imageUrl: text("image_url"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     materialDetectedAt: timestamp("material_detected_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),

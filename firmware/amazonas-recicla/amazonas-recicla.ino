@@ -56,6 +56,11 @@ String currentUserName;
 String homeSSID;
 String homePSK;
 
+// Cooldown de sessao que falhou — evita loop infinito de retries enquanto a
+// mesma sessao ainda esta marcada como ativa no backend.
+String lastFailedToken;
+unsigned long lastFailedAtMs = 0;
+
 struct HttpResult {
   int    code;
   String body;
@@ -318,6 +323,17 @@ void resetToIdle(const __FlashStringHelper* reason) {
   setState(STATE_IDLE);
 }
 
+void resetToIdleAfterFailure(const __FlashStringHelper* reason) {
+  // Marca o token como recentemente falho pra evitar loop de retries enquanto
+  // o backend ainda considera a sessao ativa (so vai expirar em ~60s).
+  lastFailedToken = currentToken;
+  lastFailedAtMs  = millis();
+  Serial.print(F("[session] marcando token como failed (cooldown "));
+  Serial.print(FAIL_COOLDOWN_MS / 1000);
+  Serial.println(F("s)"));
+  resetToIdle(reason);
+}
+
 void tickStateMachine() {
   const unsigned long inState = millis() - stateEnteredMs;
 
@@ -372,6 +388,14 @@ void pollActiveSession() {
   const char* token    = doc["token"];
   const char* userName = doc["userDisplayName"] | "";
   if (!token) return;
+
+  // Cooldown: ignora token que falhou recentemente. Evita loop ate a sessao
+  // expirar no backend.
+  if (lastFailedToken.length() > 0 &&
+      String(token) == lastFailedToken &&
+      (millis() - lastFailedAtMs) < FAIL_COOLDOWN_MS) {
+    return;
+  }
 
   currentToken    = token;
   currentUserName = userName;
@@ -457,18 +481,31 @@ void doClassifyWithImage() {
 
   // 1. Switch pra AP do CAM
   if (!connectToCamAP()) {
-    resetToIdle(F("nao conseguiu conectar no AP do CAM"));
+    resetToIdleAfterFailure(F("nao conseguiu conectar no AP do CAM"));
     return;
   }
-  delay(500);   // estabiliza DHCP
+  delay(800);   // estabiliza DHCP + da tempo do CameraWebServer ficar pronto
 
-  // 2. Baixa JPEG
+  // 2. Baixa JPEG (com retry — CameraWebServer as vezes solta a conexao no
+  //    primeiro request apos boot/reconnect).
   size_t jpegLen = 0;
-  uint8_t *jpeg = fetchJpegFromCam(&jpegLen);
+  uint8_t *jpeg = nullptr;
+  for (int attempt = 0; attempt <= CAM_CAPTURE_RETRIES; attempt++) {
+    if (attempt > 0) {
+      Serial.print(F("[classify] retry "));
+      Serial.print(attempt);
+      Serial.print(F("/"));
+      Serial.println(CAM_CAPTURE_RETRIES);
+      delay(800);
+    }
+    jpeg = fetchJpegFromCam(&jpegLen);
+    if (jpeg) break;
+  }
+
   if (!jpeg) {
-    Serial.println(F("[classify] falha ao baixar JPEG"));
+    Serial.println(F("[classify] falha ao baixar JPEG apos retries"));
     reconnectHome();
-    resetToIdle(F("falha na captura"));
+    resetToIdleAfterFailure(F("falha na captura"));
     return;
   }
   Serial.print(F("[classify] JPEG baixado: "));
@@ -477,7 +514,7 @@ void doClassifyWithImage() {
   // 3. Volta pra rede de casa
   if (!reconnectHome()) {
     free(jpeg);
-    resetToIdle(F("falha ao reconectar rede de casa"));
+    resetToIdleAfterFailure(F("falha ao reconectar rede de casa"));
     return;
   }
   delay(500);
@@ -511,16 +548,16 @@ void doClassifyWithImage() {
         const char* reason = resp["reason"] | "?";
         Serial.print(F("[classify] backend recusou: "));
         Serial.println(reason);
-        resetToIdle(F("classificacao com baixa confianca"));
+        resetToIdleAfterFailure(F("classificacao com baixa confianca"));
         return;
       }
     }
   }
 
-  if (r.code == 410)      resetToIdle(F("sessao expirada (410)"));
-  else if (r.code == 409) resetToIdle(F("transicao invalida (409)"));
-  else if (r.code == 401) resetToIdle(F("chave invalida (401)"));
-  else                    resetToIdle(F("erro generico no classify-image"));
+  if (r.code == 410)      resetToIdleAfterFailure(F("sessao expirada (410)"));
+  else if (r.code == 409) resetToIdleAfterFailure(F("transicao invalida (409)"));
+  else if (r.code == 401) resetToIdleAfterFailure(F("chave invalida (401)"));
+  else                    resetToIdleAfterFailure(F("erro generico no classify-image"));
 }
 
 // -----------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { db } from "@/lib/db/client";
 import { sessions, bins, profiles } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -39,6 +40,38 @@ Apenas o JSON.`;
 interface ClaudeClassification {
   material: string | null;
   confidence: number;
+}
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const STORAGE_BUCKET = "session-images";
+
+async function uploadImageToStorage(
+  token: string,
+  buffer: Buffer,
+): Promise<string | null> {
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) return null;
+  try {
+    const supabase = createSupabaseClient(SUPABASE_URL, SERVICE_ROLE_KEY);
+    const path = `${token}.jpg`;
+    const { error } = await supabase.storage
+      .from(STORAGE_BUCKET)
+      .upload(path, buffer, {
+        contentType: "image/jpeg",
+        upsert: true,
+      });
+    if (error) {
+      // eslint-disable-next-line no-console
+      console.warn("[classify-image] storage upload failed:", error.message);
+      return null;
+    }
+    const { data } = supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+    return data.publicUrl;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.warn("[classify-image] storage exception:", err);
+    return null;
+  }
 }
 
 export async function POST(request: Request, { params }: Params) {
@@ -148,25 +181,36 @@ export async function POST(request: Request, { params }: Params) {
     );
   }
 
-  // 7) Sanity check do output
+  // 7) Upload da foto pro Storage (em paralelo com decisao da classificacao)
+  const imageUrl = await uploadImageToStorage(token, buffer);
+
+  // 8) Sanity check do output da IA
   if (
     classification.material === null ||
     typeof classification.confidence !== "number" ||
     classification.confidence < MIN_CONFIDENCE ||
     !isValidMaterial(classification.material)
   ) {
+    // Mesmo nao classificando, salvamos a URL da imagem pra debug
+    if (imageUrl) {
+      await db
+        .update(sessions)
+        .set({ imageUrl })
+        .where(eq(sessions.token, token));
+    }
     return NextResponse.json({
       ok: false,
       reason: "unrecognized_or_low_confidence",
       material: classification.material,
       confidence: classification.confidence,
+      imageUrl,
     });
   }
 
   const material = classification.material;
   const pointsValue = pointsForMaterial(material);
 
-  // 8) Atualiza sessao (mesmo path do /classify)
+  // 9) Atualiza sessao (mesmo path do /classify)
   await db
     .update(sessions)
     .set({
@@ -174,10 +218,11 @@ export async function POST(request: Request, { params }: Params) {
       material,
       pointsValue,
       materialDetectedAt: new Date(),
+      imageUrl,
     })
     .where(eq(sessions.token, token));
 
-  // 9) Broadcast pro kiosk
+  // 10) Broadcast pro kiosk
   const [profile] = await db
     .select({ displayName: profiles.displayName })
     .from(profiles)
@@ -198,5 +243,6 @@ export async function POST(request: Request, { params }: Params) {
     confidence: classification.confidence,
     pointsValue,
     destinationCompartment: material,
+    imageUrl,
   });
 }
